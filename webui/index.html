@@ -224,7 +224,7 @@
                     isAdmin = false;
                     fetchSession();
                 };
-                // Admin training UI
+                // Admin UI
                 if (isAdmin) {
                     adminTrainBox.innerHTML = `
                         <form id="adminTrainForm" style="margin-top:18px; background:#1a1e2a; padding:16px; border-radius:8px;">
@@ -233,6 +233,7 @@
                             <button type="submit">Train</button>
                         </form>
                         <div id="trainStatus" style="margin-top:8px; min-height:24px;"></div>
+                        <div id="adminUserBox" style="margin-top:24px;"></div>
                     `;
                     document.getElementById('adminTrainForm').onsubmit = async (e) => {
                         e.preventDefault();
@@ -258,6 +259,67 @@
                             trainStatus.style.color = '#ff6b6b';
                         }
                     };
+
+                    // Admin user management UI
+                    const adminUserBox = document.getElementById('adminUserBox');
+                    adminUserBox.innerHTML = '<span style="color:#7fffd4; font-weight:bold;">User Management:</span> <span id="userStatus"></span><div id="userList"></div>';
+                    const userStatus = document.getElementById('userStatus');
+                    const userList = document.getElementById('userList');
+                    async function loadUsers() {
+                        userStatus.textContent = 'Loading...';
+                        try {
+                            const res = await fetch('/api/admin/users');
+                            if (res.ok) {
+                                const users = await res.json();
+                                userList.innerHTML = users.map(u => `
+                                    <div style="margin:8px 0; background:#23283a; padding:8px; border-radius:6px;">
+                                        <b>${u.username}</b> (${u.email})${u.is_admin ? ' <span style="color:#ffd700;">[admin]</span>' : ''}
+                                        ${u.username !== 'admin' ? `
+                                            <button data-user="${u.username}" class="deleteUserBtn">Delete</button>
+                                            <button data-user="${u.username}" class="resetPassBtn">Reset Password</button>
+                                        ` : ''}
+                                    </div>
+                                `).join('');
+                                userStatus.textContent = '';
+                                // Attach delete/reset handlers
+                                userList.querySelectorAll('.deleteUserBtn').forEach(btn => {
+                                    btn.onclick = async () => {
+                                        if (!confirm('Delete user ' + btn.dataset.user + '?')) return;
+                                        userStatus.textContent = 'Deleting...';
+                                        const res = await fetch('/api/admin/user/' + btn.dataset.user, { method: 'DELETE' });
+                                        if (res.ok) {
+                                            userStatus.textContent = 'User deleted.';
+                                            loadUsers();
+                                        } else {
+                                            userStatus.textContent = 'Delete failed.';
+                                        }
+                                    };
+                                });
+                                userList.querySelectorAll('.resetPassBtn').forEach(btn => {
+                                    btn.onclick = async () => {
+                                        const newPass = prompt('Enter new password for ' + btn.dataset.user + ':');
+                                        if (!newPass) return;
+                                        userStatus.textContent = 'Resetting password...';
+                                        const res = await fetch('/api/admin/user/reset_password', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ username: btn.dataset.user, new_password: newPass, token: '' })
+                                        });
+                                        if (res.ok) {
+                                            userStatus.textContent = 'Password reset.';
+                                        } else {
+                                            userStatus.textContent = 'Reset failed.';
+                                        }
+                                    };
+                                });
+                            } else {
+                                userStatus.textContent = 'Failed to load users.';
+                            }
+                        } catch {
+                            userStatus.textContent = 'Failed to load users.';
+                        }
+                    }
+                    loadUsers();
                 }
             }
         }

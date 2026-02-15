@@ -1,3 +1,80 @@
+mod admin;
+mod brain;
+mod auth;
+
+use admin::user::*;
+use brain::*;
+use auth::*;
+		let hash = Argon2::default().hash_password(req.new_password.as_bytes(), &PasswordSalt::generate()).unwrap().to_string();
+		user_json["password"] = serde_json::Value::String(hash);
+		db.insert(user_key, serde_json::to_vec(&user_json).unwrap()).unwrap();
+		return actix_web::HttpResponse::Ok().json(serde_json::json!({"ok": true}));
+	}
+	actix_web::HttpResponse::BadRequest().json(serde_json::json!({"error": "User not found"}))
+}
+use std::process::Command;
+use tokio::time::{sleep, Duration};
+use serde_json::Value;
+
+// --- GitHub Auto-Update Watcher ---
+async fn github_update_watcher() {
+	let repo = "1090mb/JeebsAI";
+	let mut last_tag = get_current_version();
+	loop {
+		match get_latest_github_release(repo).await {
+			Ok((tag, asset_url)) if tag != last_tag => {
+				if let Err(e) = download_and_replace(&asset_url).await {
+					eprintln!("[update] Download failed: {}", e);
+				} else {
+					println!("[update] Updated to {}. Restarting...", tag);
+					restart_jeebs();
+					break;
+				}
+			}
+			_ => {}
+		}
+		sleep(Duration::from_secs(600)).await;
+	}
+}
+
+fn get_current_version() -> String {
+	env!("CARGO_PKG_VERSION").to_string()
+}
+
+async fn get_latest_github_release(repo: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+	let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+	let client = reqwest::Client::new();
+	let resp = client.get(&url)
+		.header("User-Agent", "jeebs-updater")
+		.send().await?;
+	let json: Value = resp.json().await?;
+	let tag = json["tag_name"].as_str().unwrap_or("").to_string();
+	let branch = json["target_commitish"].as_str().unwrap_or("");
+	if branch != "main" {
+		return Err("Not a main branch release".into());
+	}
+	let assets = json["assets"].as_array().unwrap_or(&vec![]);
+	let asset_url = assets.iter()
+		.find(|a| a["name"].as_str().unwrap_or("").ends_with(".tar.gz"))
+		.and_then(|a| a["browser_download_url"].as_str())
+		.unwrap_or("").to_string();
+	Ok((tag, asset_url))
+}
+
+async fn download_and_replace(asset_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+	let resp = reqwest::get(asset_url).await?;
+	let bytes = resp.bytes().await?;
+	std::fs::write("update.tar.gz", &bytes)?;
+	// Extract and replace binary (assumes tarball contains the binary)
+	Command::new("tar").args(["-xzf", "update.tar.gz", "-C", "."]).status()?;
+	Ok(())
+}
+
+fn restart_jeebs() {
+	// This will work if Jeebs is run under a supervisor (systemd, etc.)
+	// For direct exec, you can use std::process::exit(0) and let a wrapper script restart it
+	std::process::exit(0);
+}
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use reqwest;
@@ -42,29 +119,7 @@ fn add_brain_edge(db: &sled::Db, from: &str, to: &str) {
 }
 
 // --- Admin Training Mode: Web Scraping & Learning ---
-#[derive(Deserialize)]
-struct TrainRequest {
-	url: String,
-}
-
-#[post("/api/admin/train")]
-async fn admin_train(
-	data: web::Data<AppState>,
-	session: Session,
-	req: web::Json<TrainRequest>,
-) -> impl Responder {
-	// Only allow admin
-	let is_admin = session.get::<bool>("is_admin").unwrap_or(Some(false)).unwrap_or(false);
-	if !is_admin {
-		return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
-	}
-	let url = req.url.trim();
-	let db = &data.db;
-	// Fetch web page
-	let body = match reqwest::get(url).await {
-		Ok(resp) => resp.text().await.unwrap_or_default(),
-		Err(_) => return HttpResponse::BadRequest().json(json!({"error": "Failed to fetch URL"})),
-	};
+// ...existing code...
 	// Parse HTML and extract title and main text
 	let doc = Html::parse_document(&body);
 	let title = doc.select(&Selector::parse("title").unwrap()).next().map(|e| e.text().collect::<String>()).unwrap_or_else(|| url.to_string());
@@ -424,6 +479,9 @@ fn jeebs_think(prompt: &str, db: &sled::Db) -> String {
 		// Open sled database for unique storage
 		let db: Db = sled::open("jeebs_db").expect("open sled db");
 
+		// Start GitHub update watcher in background
+		tokio::spawn(github_update_watcher());
+
 		// Start web server in background
 		let db_web = db.clone();
 		let secret_key = Key::generate();
@@ -435,14 +493,18 @@ fn jeebs_think(prompt: &str, db: &sled::Db) -> String {
 					secret_key.clone(),
 				))
 				.app_data(web::Data::new(AppState { db: db_web.clone() }))
-				.service(register)
+				.service(auth::register)
+				.service(auth::reset)
 				.service(login)
 				.service(logout)
 				.service(request_reset)
 				.service(reset_password)
 				.service(verify_email)
 				.service(jeebs_api)
-				.service(admin_train)
+				.service(brain::admin_train)
+				.service(admin::admin_list_users)
+				.service(admin::admin_delete_user)
+				.service(admin::admin_reset_user_password)
 				.service(Files::new("/", "webui").index_file("index.html"))
 		})
 		.bind(("0.0.0.0", 8080))?
