@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeebs Club</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #181c24; color: #f3f3f3; margin: 0; }
+        .container { max-width: 600px; margin: 60px auto; background: #23283a; border-radius: 16px; box-shadow: 0 4px 32px #0008; padding: 32px; }
+        .status { margin-bottom: 12px; min-height: 24px; color: #7fffd4; text-align: center; font-size: 1.05em; }
+        .spinner { display: inline-block; width: 18px; height: 18px; border: 3px solid #7fffd4; border-radius: 50%; border-top: 3px solid #23283a; animation: spin 1s linear infinite; vertical-align: middle; margin-left: 8px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+        form input, form button { margin-bottom: 4px; }
+        #loginBox form, #loginBox > form { flex-direction: column; align-items: stretch; gap: 6px; }
+        #loginBox input, #loginBox button { width: 100%; }
+        h1 { text-align: center; color: #7fffd4; }
+        #chat { min-height: 300px; margin-bottom: 24px; padding: 16px; background: #1a1e2a; border-radius: 8px; overflow-y: auto; }
+        .msg { margin: 8px 0; }
+        .user { color: #7fffd4; }
+        .jeebs { color: #ffd700; }
+        form { display: flex; gap: 8px; }
+        input[type=text] { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 1rem; background: #23283a; color: #f3f3f3; }
+        button { padding: 12px 24px; border-radius: 8px; border: none; background: #7fffd4; color: #181c24; font-weight: bold; font-size: 1rem; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #5ee6c1; }
+        @media (max-width: 700px) { .container { margin: 16px; padding: 16px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Jeebs Club</h1>
+        <div id="session"></div>
+        <div class="status" id="statusMsg"></div>
+        <div id="loginBox" style="margin-bottom:16px;"></div>
+        <div id="chat"></div>
+        <form id="promptForm">
+            <input type="text" id="promptInput" placeholder="Ask Jeebs anything..." autocomplete="off" required />
+            <button type="submit">Send</button>
+        </form>
+        <div id="adminTrainBox"></div>
+    </div>
+    <script>
+        const chat = document.getElementById('chat');
+        const form = document.getElementById('promptForm');
+        const input = document.getElementById('promptInput');
+        const sessionDiv = document.getElementById('session');
+
+        let loggedIn = false;
+        let username = null;
+        let isAdmin = false;
+        const statusMsg = document.getElementById('statusMsg');
+
+        function showStatus(msg, isError = false) {
+            statusMsg.textContent = msg;
+            statusMsg.style.color = isError ? '#ff6b6b' : '#7fffd4';
+        }
+        function showSpinner(msg) {
+            statusMsg.innerHTML = msg + ' <span class="spinner"></span>';
+            statusMsg.style.color = '#7fffd4';
+        }
+
+        async function fetchSession() {
+            showSpinner('Checking session...');
+            // Try to get session cookie (for demo, just show if present)
+            const cookies = document.cookie.split(';').map(c => c.trim());
+            const sid = cookies.find(c => c.startsWith('actix-session='));
+            sessionDiv.textContent = sid ? 'Session: ' + sid.substring(14, 50) + '...' : 'Session: (none)';
+            // Try to get login state
+            if (sid) {
+                try {
+                    const res = await fetch('/api/jeebs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: 'who are you' })
+                    });
+                    if (res.status === 401) {
+                        loggedIn = false;
+                        username = null;
+                        isAdmin = false;
+                        showStatus('Not logged in.');
+                    } else {
+                        const data = await res.json();
+                        loggedIn = true;
+                        showStatus('Logged in.');
+                    }
+                } catch {
+                    showStatus('Could not connect to server.', true);
+                }
+            } else {
+                loggedIn = false;
+                username = null;
+                isAdmin = false;
+                showStatus('Not logged in.');
+            }
+            renderLoginBox();
+        }
+        fetchSession();
+
+        function renderLoginBox() {
+            const box = document.getElementById('loginBox');
+            box.innerHTML = '';
+            const adminTrainBox = document.getElementById('adminTrainBox');
+            adminTrainBox.innerHTML = '';
+            if (!loggedIn) {
+                box.innerHTML = `
+                <form id="loginForm" style="margin-bottom:8px;">
+                    <input type="text" id="loginUser" placeholder="Username" required />
+                    <input type="password" id="loginPass" placeholder="Password" required />
+                    <button type="submit">Login</button>
+                </form>
+                <form id="registerForm">
+                    <input type="text" id="regUser" placeholder="New Username" required />
+                    <input type="password" id="regPass" placeholder="New Password" required />
+                    <input type="email" id="regEmail" placeholder="Email" required />
+                    <button type="submit">Register</button>
+                </form>
+                <form id="resetForm" style="margin-top:8px;">
+                    <input type="text" id="resetUser" placeholder="Username" required />
+                    <input type="email" id="resetEmail" placeholder="Email" required />
+                    <button type="submit">Request Password Reset</button>
+                </form>
+                <form id="verifyForm" style="margin-top:8px;">
+                    <input type="text" id="verifyUser" placeholder="Username" required />
+                    <input type="text" id="verifyToken" placeholder="Verification Token" required />
+                    <button type="submit">Verify Email</button>
+                </form>
+                `;
+                document.getElementById('loginForm').onsubmit = async (e) => {
+                    e.preventDefault();
+                    showSpinner('Logging in...');
+                    const usernameVal = document.getElementById('loginUser').value;
+                    const passwordVal = document.getElementById('loginPass').value;
+                    try {
+                        const res = await fetch('/api/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: usernameVal, password: passwordVal })
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            loggedIn = true;
+                            username = data.username;
+                            isAdmin = data.is_admin;
+                            showStatus('Login successful!');
+                            fetchSession();
+                        } else {
+                            const data = await res.json();
+                            showStatus('Login failed: ' + (data.error || 'Unknown error'), true);
+                        }
+                    } catch {
+                        showStatus('Login failed: network error', true);
+                    }
+                };
+                document.getElementById('registerForm').onsubmit = async (e) => {
+                    e.preventDefault();
+                    showSpinner('Registering...');
+                    const usernameVal = document.getElementById('regUser').value;
+                    const passwordVal = document.getElementById('regPass').value;
+                    const emailVal = document.getElementById('regEmail').value;
+                    try {
+                        const res = await fetch('/api/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: usernameVal, password: passwordVal, email: emailVal })
+                        });
+                        if (res.ok) {
+                            showStatus('Registration successful! Check your email for a verification token (see server log).');
+                        } else {
+                            const data = await res.json();
+                            showStatus('Registration failed: ' + (data.error || 'Unknown error'), true);
+                        }
+                    } catch {
+                        showStatus('Registration failed: network error', true);
+                    }
+                };
+                document.getElementById('resetForm').onsubmit = async (e) => {
+                    e.preventDefault();
+                    showSpinner('Requesting password reset...');
+                    const usernameVal = document.getElementById('resetUser').value;
+                    const emailVal = document.getElementById('resetEmail').value;
+                    try {
+                        const res = await fetch('/api/request_reset', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: usernameVal, email: emailVal })
+                        });
+                        if (res.ok) {
+                            showStatus('Reset token sent! Check your email (see server log).');
+                        } else {
+                            const data = await res.json();
+                            showStatus('Reset failed: ' + (data.error || 'Unknown error'), true);
+                        }
+                    } catch {
+                        showStatus('Reset failed: network error', true);
+                    }
+                };
+                document.getElementById('verifyForm').onsubmit = async (e) => {
+                    e.preventDefault();
+                    showSpinner('Verifying email...');
+                    const usernameVal = document.getElementById('verifyUser').value;
+                    const tokenVal = document.getElementById('verifyToken').value;
+                    try {
+                        const res = await fetch('/api/verify_email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: usernameVal, token: tokenVal, new_password: '' })
+                        });
+                        if (res.ok) {
+                            showStatus('Email verified! You can now log in.');
+                        } else {
+                            const data = await res.json();
+                            showStatus('Verification failed: ' + (data.error || 'Unknown error'), true);
+                        }
+                    } catch {
+                        showStatus('Verification failed: network error', true);
+                    }
+                };
+            } else {
+                box.innerHTML = `<span>Logged in as <b>${username || 'user'}</b>${isAdmin ? ' (admin)' : ''}</span> <button id="logoutBtn">Logout</button>`;
+                document.getElementById('logoutBtn').onclick = async () => {
+                    await fetch('/api/logout', { method: 'POST' });
+                    loggedIn = false;
+                    username = null;
+                    isAdmin = false;
+                    fetchSession();
+                };
+                // Admin training UI
+                if (isAdmin) {
+                    adminTrainBox.innerHTML = `
+                        <form id="adminTrainForm" style="margin-top:18px; background:#1a1e2a; padding:16px; border-radius:8px;">
+                            <label for="trainUrl" style="color:#7fffd4; font-weight:bold;">Train Jeebs from URL:</label>
+                            <input type="text" id="trainUrl" placeholder="https://example.com/article" required style="margin:8px 0;" />
+                            <button type="submit">Train</button>
+                        </form>
+                        <div id="trainStatus" style="margin-top:8px; min-height:24px;"></div>
+                    `;
+                    document.getElementById('adminTrainForm').onsubmit = async (e) => {
+                        e.preventDefault();
+                        const url = document.getElementById('trainUrl').value.trim();
+                        const trainStatus = document.getElementById('trainStatus');
+                        trainStatus.innerHTML = 'Training... <span class="spinner"></span>';
+                        try {
+                            const res = await fetch('/api/admin/train', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ url })
+                            });
+                            if (res.ok) {
+                                const data = await res.json();
+                                trainStatus.textContent = `Trained on: ${data.label}`;
+                            } else {
+                                const data = await res.json();
+                                trainStatus.textContent = 'Training failed: ' + (data.error || 'Unknown error');
+                                trainStatus.style.color = '#ff6b6b';
+                            }
+                        } catch {
+                            trainStatus.textContent = 'Training failed: network error';
+                            trainStatus.style.color = '#ff6b6b';
+                        }
+                    };
+                }
+            }
+        }
+
+        function addMsg(text, who) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + who;
+            div.textContent = (who === 'user' ? 'You: ' : 'Jeebs: ') + text;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            if (!loggedIn) {
+                showStatus('Please log in first!', true);
+                return;
+            }
+            const prompt = input.value.trim();
+            if (!prompt) return;
+            addMsg(prompt, 'user');
+            input.value = '';
+            addMsg('...', 'jeebs');
+            showSpinner('Jeebs is thinking...');
+            try {
+                const res = await fetch('/api/jeebs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                if (res.status === 401) {
+                    chat.lastChild.textContent = 'Jeebs: (not logged in)';
+                    showStatus('Not logged in.', true);
+                    fetchSession();
+                    return;
+                }
+                const data = await res.json();
+                chat.lastChild.textContent = 'Jeebs: ' + data.response;
+                showStatus('');
+                fetchSession();
+            } catch {
+                chat.lastChild.textContent = 'Jeebs: (error connecting to server)';
+                showStatus('Could not connect to server.', true);
+            }
+        };
+    </script>
+</body>
+</html>
