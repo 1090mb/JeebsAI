@@ -19,7 +19,12 @@ actix-web = "4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 actix-session = { version = "0.7", features = ["cookie-session"] }
 actix-web-actors = "4"
-tokio-stream = "0.1"
+	tokio-stream = { version = "0.1", features = ["sync"] }
+	actix-files = "0.6"
+	actix = "0.13"
+	once_cell = "1.21"
+	rand_core = "0.6"
+	csv = "1.2"
 actix-logger = "0.4.1"
 reqwest = { version = "0.11", features = ["json"] }
 libloading = "0.8"
@@ -29,6 +34,7 @@ log = "0.4"
 scraper = "0.18"
 aes-gcm = "0.10"
 base64 = "0.21"
+urlencoding = "2.1"
 sha2 = "0.10"
 md-5 = "0.10"
 sha1 = "0.10"

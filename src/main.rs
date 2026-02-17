@@ -12,7 +12,8 @@ mod security;
 mod evolution;
 
 use actix_web::{get, web, App, HttpServer, HttpResponse, Responder};
-use actix_session::{SessionMiddleware, storage::CookieSessionStore};
+use actix_web::dev::Service;
+use actix_session::{Session, SessionMiddleware, storage::CookieSessionStore};
 use actix_web::cookie::Key;
 use actix_web::middleware::Logger;
 use actix_files::Files;
@@ -138,7 +139,7 @@ async fn main() -> std::io::Result<()> {
 		struct WhitelistedKeyExtractor;
 		impl KeyExtractor for WhitelistedKeyExtractor {
 			type Key = String;
-			type KeyExtractionError = SimpleKeyExtractionError;
+		type KeyExtractionError = SimpleKeyExtractionError<String>;
 			fn extract(&self, req: &ServiceRequest) -> Result<Self::Key, Self::KeyExtractionError> {
 				let state = req.app_data::<web::Data<AppState>>().unwrap();
 				let ip = req.peer_addr().map(|a| a.ip().to_string()).unwrap_or_else(|| "unknown".to_string());
@@ -159,12 +160,16 @@ async fn main() -> std::io::Result<()> {
 			App::new()
 				.app_data(web::JsonConfig::default().limit(50 * 1024 * 1024))
 				.wrap_fn(|req, srv| {
-					let state = req.app_data::<web::Data<AppState>>().unwrap();
+					use futures_util::{future::{Either, ready}};
 					let ip = req.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
-					if state.ip_blacklist.read().unwrap().contains(&ip) {
-						return Box::pin(async { Ok(req.error_response(actix_web::error::ErrorForbidden("IP Blacklisted"))) });
+					let state = req.app_data::<web::Data<AppState>>().cloned();
+					if let Some(state) = state {
+						if state.ip_blacklist.read().unwrap().contains(&ip) {
+							let resp = req.error_response(actix_web::error::ErrorForbidden("IP Blacklisted"));
+							return Either::Left(ready(Ok(resp)));
+						}
 					}
-					srv.call(req)
+					Either::Right(srv.call(req))
 				})
 				.wrap(Governor::new(&governor_conf))
 				.wrap(Logger::default())
@@ -180,7 +185,6 @@ async fn main() -> std::io::Result<()> {
 				.service(auth::reset_password)
 				.service(auth::verify_email)
 				.service(auth::change_password)
-				.service(auth::update_email)
 				.service(auth::upload_avatar)
 				.service(auth::get_avatar)
 				.service(auth::get_profile)
