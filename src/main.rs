@@ -1,3 +1,4 @@
+use actix_session::Session;
 mod admin;
 mod brain;
 mod auth;
@@ -138,7 +139,7 @@ async fn main() -> std::io::Result<()> {
 		struct WhitelistedKeyExtractor;
 		impl KeyExtractor for WhitelistedKeyExtractor {
 			type Key = String;
-			type KeyExtractionError = SimpleKeyExtractionError;
+			type KeyExtractionError = SimpleKeyExtractionError<String>;
 			fn extract(&self, req: &ServiceRequest) -> Result<Self::Key, Self::KeyExtractionError> {
 				let state = req.app_data::<web::Data<AppState>>().unwrap();
 				let ip = req.peer_addr().map(|a| a.ip().to_string()).unwrap_or_else(|| "unknown".to_string());
@@ -180,7 +181,7 @@ async fn main() -> std::io::Result<()> {
 				.service(auth::reset_password)
 				.service(auth::verify_email)
 				.service(auth::change_password)
-				.service(auth::update_email)
+				// .service(auth::update_email)
 				.service(auth::upload_avatar)
 				.service(auth::get_avatar)
 				.service(auth::get_profile)
@@ -225,7 +226,7 @@ async fn main() -> std::io::Result<()> {
 				.service(evolution::brainstorm_update)
 				.service(Files::new("/", "webui").index_file("index.html"))
 	})
-	.bind(("127.0.0.1", std::env::var("PORT").unwrap_or_else(|_| "8080".to_string()).parse::<u16>().unwrap_or(8080)))?;
+	.bind(("0.0.0.0", std::env::var("PORT").unwrap_or_else(|_| "8080".to_string()).parse::<u16>().unwrap_or(8080)))?;
 
 	// CLI loop (optional, can be removed if only web is needed)
 	let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
