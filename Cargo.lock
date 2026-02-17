@@ -1742,6 +1742,7 @@ dependencies = [
  "csv",
  "futures-util",
  "hex",
+ "lazy_static",
  "libloading",
  "log",
  "md-5",
