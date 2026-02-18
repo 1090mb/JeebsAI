@@ -486,12 +486,6 @@ pub fn load_dynamic_plugins(dir: &str) -> Vec<Box<dyn Plugin>> {
     }
 
     v
-}            let p = prompt.to_lowercase();
-            if p.contains("time") || p.contains("what time") {
-                Some(Local::now().to_rfc3339())
-            } else { None }
-        })
-    }
 }
 
 // Calc plugin — evaluates simple math expressions using `meval`.
