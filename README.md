@@ -13,6 +13,8 @@ JeebsAI is a modular Rust-based AI assistant with a web UI and persistent storag
 - [Usage](#usage)
 - [Project Structure](#project-structure)
 - [Development](#development)
+- [Contributing](#contributing)
+- [CI/CD](#cicd)
 
 ## Prerequisites
 
@@ -247,6 +249,24 @@ All major features are separated into modules and submodules for maintainability
 - Login endpoints have strict rate limits (1 req/s with burst of 5)
 - General API endpoints are limited to 10 req/s with burst of 20
 - SSL/TLS encryption via Let's Encrypt (Certbot)
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- Development workflow guidelines
+- Code standards and style guide
+- Testing requirements
+- Pull request process
+
+## CI/CD
+
+This project uses GitHub Actions for continuous integration and deployment:
+
+- **CI Pipeline:** Automatically runs tests, linting, and security checks on every push and pull request
+- **Deployment Pipeline:** Automatically deploys to production VPS on merges to the `main` branch
+
+For detailed information on setting up and using the CI/CD pipelines, see [.github/GITHUB_ACTIONS_SETUP.md](.github/GITHUB_ACTIONS_SETUP.md).
 
 ## Troubleshooting
 
