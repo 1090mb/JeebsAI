@@ -35,7 +35,7 @@ docker run -d \
   -e PORT=8080 \
   -e DATABASE_URL=sqlite:/data/jeebs.db \
   --restart unless-stopped \
-  deployed-labs/jeebs:latest
+  ghcr.io/deployed-labs/jeebs:latest
 ```
 
 Important:
