@@ -445,20 +445,20 @@ pub fn load_dynamic_plugins(dir: &str) -> Vec<Box<dyn Plugin>> {
 }
 
 pub struct SummaryPlugin;
+
+#[async_trait]
 impl Plugin for SummaryPlugin {
-    fn name(&self) -> &str { "Summary" }
-    fn handle(&self, prompt: String, _db: SqlitePool) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-        Box::pin(async move {
-            let lower = prompt.to_lowercase();
-            if lower.starts_with("summarize ") {
-                let text = prompt[10..].trim();
-                let sentences: Vec<_> = text.split('.').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-                if sentences.is_empty() { return Some("Nothing to summarize.".to_string()); }
-                let summary = sentences.into_iter().take(2).collect::<Vec<_>>().join(". ");
-                return Some(summary.chars().take(400).collect::<String>());
-            }
-            None
-        })
+    fn name(&self) -> &'static str { "summary" }
+    async fn handle(&self, input: &str, _state: &crate::state::AppState) -> Option<String> {
+        let lower = input.to_lowercase();
+        if lower.starts_with("summarize ") {
+            let text = input["summarize ".len()..].trim();
+            let sentences: Vec<_> = text.split('.').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+            if sentences.is_empty() { return Some("Nothing to summarize.".to_string()); }
+            let summary = sentences.into_iter().take(2).collect::<Vec<_>>().join(". ");
+            return Some(summary.chars().take(400).collect::<String>());
+        }
+        None
     }
 }
 
@@ -469,15 +469,34 @@ fn pig_latin_word(w: &str) -> String {
     let first = w.chars().next().unwrap();
     if "aeiouAEIOU".contains(first) { format!("{}-ay", w) } else { format!("{}-{}ay", &w[1..], first) }
 }
+
 pub struct TranslatePlugin;
+
+#[async_trait]
 impl Plugin for TranslatePlugin {
-    fn name(&self) -> &str { "Translate" }
-    fn handle(&self, prompt: String, _db: SqlitePool) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-        Box::pin(async move {
-            let lower = prompt.to_lowercase();
-            if lower.starts_with("translate to ") {
-                if let Some((lang, rest)) = prompt[13..].split_once(':') {
-                    let lang = lang.trim().to_lowercase();
+    fn name(&self) -> &'static str { "translate" }
+    async fn handle(&self, input: &str, _state: &crate::state::AppState) -> Option<String> {
+        let lower = input.to_lowercase();
+        if lower.starts_with("translate to ") {
+            if let Some((lang, rest)) = input["translate to ".len()..].split_once(':') {
+                let lang = lang.trim().to_lowercase();
+                let text = rest.trim();
+                match lang.as_str() {
+                    "uppercase" => return Some(text.to_uppercase()),
+                    "lowercase" => return Some(text.to_lowercase()),
+                    "pig-latin" | "pig latin" => {
+                        let words: Vec<_> = text.split_whitespace().map(|w| pig_latin_word(w)).collect();
+                        return Some(words.join(" "));
+                    }
+                    _ => return Some("Unsupported translation target. Try 'uppercase', 'lowercase', or 'pig-latin'.".to_string()),
+                }
+            } else {
+                return Some("Usage: translate to <lang>: <text>".to_string());
+            }
+        }
+        None
+    }
+}
                     let text = rest.trim();
                     match lang.as_str() {
                         "uppercase" => return Some(text.to_uppercase()),
