@@ -134,7 +134,7 @@ pub async fn admin_train(
     let summary: String = text.chars().take(400).collect();
     let id = blake3::hash(url.as_bytes()).to_hex().to_string();
     let node = BrainNode {
-        id: id.clone(),
+        id,
         label: title,
         summary,
         sources: vec![url.clone()],
@@ -150,7 +150,7 @@ pub async fn admin_train(
         &format!("Trained on URL: {url}"),
     )
     .await;
-    HttpResponse::Ok().json(serde_json::json!({"ok": true, "id": id, "label": node.label}))
+    HttpResponse::Ok().json(serde_json::json!({"ok": true, "id": node.id, "label": node.label}))
 }
 
 #[derive(Deserialize)]
@@ -223,7 +223,7 @@ pub async fn admin_crawl(
                     
                     let id = blake3::hash(url.as_bytes()).to_hex().to_string();
                     let node = BrainNode {
-                        id: id.clone(),
+                        id,
                         label: title,
                         summary,
                         sources: vec![url.clone()],
@@ -281,18 +281,24 @@ pub async fn search_brain(
             .bind(&term)
             .bind(&term)
             .fetch_all(db)
-            .await
-            .unwrap();
+            .await;
 
-    let nodes: Vec<BrainNode> = rows
-        .iter()
-        .filter_map(|row| {
-            let val: Vec<u8> = row.get(0);
-            decode_all(&val)
-                .ok()
-                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        })
-        .collect();
+    let nodes: Vec<BrainNode> = match rows {
+        Ok(rows) => rows
+            .iter()
+            .filter_map(|row| {
+                let val: Vec<u8> = row.get(0);
+                decode_all(&val)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            })
+            .collect(),
+        Err(e) => {
+            log::error!("Failed to search brain nodes: {}", e);
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": "Database query failed"}));
+        }
+    };
 
     HttpResponse::Ok().json(nodes)
 }
@@ -330,10 +336,17 @@ pub async fn reindex_brain(data: web::Data<AppState>, session: Session) -> impl 
     }
 
     let db = &data.db;
-    let rows = sqlx::query("SELECT value FROM jeebs_store WHERE key LIKE 'brain:node:%'")
+    let rows = match sqlx::query("SELECT value FROM jeebs_store WHERE key LIKE 'brain:node:%'")
         .fetch_all(db)
         .await
-        .unwrap();
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            log::error!("Failed to fetch brain nodes for reindex: {}", e);
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": "Database query failed"}));
+        }
+    };
 
     let mut count = 0;
     for row in rows {
@@ -365,10 +378,17 @@ struct GraphEdge {
 #[get("/api/brain/visualize")]
 pub async fn visualize_brain(data: web::Data<AppState>) -> impl Responder {
     let db = &data.db;
-    let rows = sqlx::query("SELECT data FROM brain_nodes")
+    let rows = match sqlx::query("SELECT data FROM brain_nodes")
         .fetch_all(db)
         .await
-        .unwrap();
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            log::error!("Failed to fetch brain nodes for visualization: {}", e);
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({"error": "Database query failed"}));
+        }
+    };
 
     let nodes: Vec<BrainNode> = rows
         .iter()
