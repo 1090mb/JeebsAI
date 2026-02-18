@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row, SqlitePool};
 use chrono;
 use std::collections::HashSet;
+use log;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BrainNode {

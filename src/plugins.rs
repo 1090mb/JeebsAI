@@ -1,3 +1,44 @@
+use crate::state::AppState;
+use async_trait::async_trait;
+use sqlx::SqlitePool;
+use std::pin::Pin;
+use std::future::Future;
+use crate::utils::{encode_all, decode_all};
+use chrono::Local;
+use reqwest::Client;
+use meval;
+use sysinfo::System;
+use base64::Engine;
+use serde_json::json;
+use base64 as b64;
+use blake3;
+use sha2::{Sha256, Digest};
+use md5;
+use hex;
+use crate::security::generate_password;
+
+pub trait Plugin: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn handle<'a>(&'a self, input: &'a str, state: &'a AppState) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>>;
+}
+
+pub struct TimePlugin;
+pub struct CalcPlugin;
+pub struct WeatherPlugin;
+pub struct NewsPlugin;
+pub struct MemoryPlugin;
+pub struct SystemPlugin;
+pub struct SummaryPlugin;
+pub struct TranslatePlugin;
+pub struct PasswordPlugin;
+pub struct HashPlugin;
+pub struct Base64Plugin;
+pub struct LogicPlugin;
+pub struct ContactPlugin;
+pub struct WebsiteStatusPlugin;
+pub struct TodoPlugin;
+pub struct ErrorPlugin;
+
 #[async_trait]
 impl Plugin for ErrorPlugin {
     fn name(&self) -> &'static str {
@@ -320,131 +361,46 @@ impl Plugin for TimePlugin {
     }
 }
 
-use crate::state::AppState;
-use async_trait::async_trait;
 
-#[async_trait]
-pub trait Plugin: Send + Sync {
-    fn name(&self) -> &'static str;
-    async fn handle(&self, input: &str, state: &AppState) -> Option<String>;
-}
-
-pub struct TimePlugin;
-pub struct CalcPlugin;
-pub struct WeatherPlugin;
-pub struct NewsPlugin;
-pub struct MemoryPlugin;
-pub struct SystemPlugin;
-pub struct SummaryPlugin;
-pub struct TranslatePlugin;
-pub struct PasswordPlugin;
-pub struct HashPlugin;
-pub struct Base64Plugin;
-pub struct LogicPlugin;
-pub struct ContactPlugin;
-pub struct WebsiteStatusPlugin;
-pub struct TodoPlugin;
-pub struct ErrorPlugin;
-
-// External CLI plugin wrapper — supports simple JSON-over-stdin contract
-pub struct ExternalCliPlugin {
-    pub name: &'static str,
-    pub cmd: Vec<String>,
-}
+pub struct ExternalCliPlugin { pub name: &'static str, pub cmd: Vec<String> }
 
 #[async_trait]
 impl Plugin for ExternalCliPlugin {
-    fn name(&self) -> &'static str {
-        self.name
-    }
+    fn name(&self) -> &'static str { self.name }
+    fn handle<'a>(&'a self, input: &'a str, _state: &'a AppState) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>> {
+        Box::pin(async move {
+            use tokio::io::AsyncWriteExt;
+            use tokio::process::Command;
+            use tokio::time::{timeout, Duration};
 
-    async fn handle(&self, input: &str, _state: &AppState) -> Option<String> {
-        use tokio::io::AsyncWriteExt;
-        use tokio::process::Command;
-        use tokio::time::{timeout, Duration};
-
-        let payload = match serde_json::json!({ "input": input })
-            .to_string()
-            .into_bytes()
-        {
-            b => b,
-        };
-
-        let mut cmd = Command::new(&self.cmd[0]);
-        if self.cmd.len() > 1 {
-            cmd.args(&self.cmd[1..]);
-        }
-        cmd.stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
-
-        match cmd.spawn() {
-            Ok(mut child) => {
-                if let Some(mut stdin) = child.stdin.take() {
-                    if let Err(e) = stdin.write_all(&payload).await {
-                        let _ = child.kill().await;
-                        return Some(format!("plugin '{}' write error: {}", self.name, e));
+            let payload = serde_json::json!({ "input": input }).to_string().into_bytes();
+            let mut cmd = Command::new(&self.cmd[0]);
+            if self.cmd.len() > 1 { cmd.args(&self.cmd[1..]); }
+            cmd.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+            match cmd.spawn() {
+                Ok(mut child) => {
+                    if let Some(mut stdin) = child.stdin.take() {
+                        if let Err(e) = stdin.write_all(&payload).await { let _ = child.kill().await; return Some(format!("plugin '{}' write error: {}", self.name, e)); }
+                    }
+                    let pid = child.id();
+                    match timeout(Duration::from_secs(3), child.wait_with_output()).await {
+                        Ok(Ok(output)) => {
+                            if !output.status.success() { return Some(format!("plugin '{}' failed: {}", self.name, String::from_utf8_lossy(&output.stderr))); }
+                            let out = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&out) { if let Some(resp) = json.get("response").and_then(|v| v.as_str()) { return Some(resp.to_string()); } }
+                            if !out.is_empty() { return Some(out); }
+                            None
+                        }
+                        Ok(Err(e)) => { if let Some(p) = pid { let _ = Command::new("kill").arg("-9").arg(p.to_string()).status().await; } Some(format!("plugin '{}' execution error: {}", self.name, e)) }
+                        Err(_) => { if let Some(p) = pid { let _ = Command::new("kill").arg("-9").arg(p.to_string()).status().await; } Some(format!("plugin '{}' timed out", self.name)) }
                     }
                 }
-
-                // enforce a short timeout for plugin execution
-                let pid = child.id();
-                match timeout(Duration::from_secs(3), child.wait_with_output()).await {
-                    Ok(Ok(output)) => {
-                        if !output.status.success() {
-                            return Some(format!(
-                                "plugin '{}' failed: {}",
-                                self.name,
-                                String::from_utf8_lossy(&output.stderr)
-                            ));
-                        }
-                        let out = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                        // Try structured response first
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&out) {
-                            if let Some(resp) = json.get("response").and_then(|v| v.as_str()) {
-                                return Some(resp.to_string());
-                            }
-                        }
-                        if !out.is_empty() {
-                            return Some(out);
-                        }
-                        None
-                    }
-                    Ok(Err(e)) => {
-                        // waiting returned an I/O error; try to kill by PID if available
-                        if let Some(p) = pid {
-                            let _ = Command::new("kill")
-                                .arg("-9")
-                                .arg(p.to_string())
-                                .status()
-                                .await;
-                        }
-                        Some(format!("plugin '{}' execution error: {}", self.name, e))
-                    }
-                    Err(_) => {
-                        // timeout: kill process by PID if possible
-                        if let Some(p) = pid {
-                            let _ = Command::new("kill")
-                                .arg("-9")
-                                .arg(p.to_string())
-                                .status()
-                                .await;
-                        }
-                        Some(format!("plugin '{}' timed out", self.name))
-                    }
-                }
+                Err(e) => Some(format!("plugin '{}' spawn error: {}", self.name, e)),
             }
-            Err(e) => Some(format!("plugin '{}' spawn error: {}", self.name, e)),
-        }
+        })
     }
 }
 
-// Discover simple CLI-based plugins under `plugins/`.
-// Plugin contract: plugin reads JSON from stdin { "input": "..." } and writes JSON { "response": "..." }
-// Supported runners (by file present):
-//  - run          (executable in plugin directory)
-//  - run.py       (invoked with `python3 run.py`)
-//  - run.js/index.js (invoked with `node <file>`)
 pub fn load_dynamic_plugins(dir: &str) -> Vec<Box<dyn Plugin>> {
     let mut v: Vec<Box<dyn Plugin>> = Vec::new();
 
@@ -488,156 +444,6 @@ pub fn load_dynamic_plugins(dir: &str) -> Vec<Box<dyn Plugin>> {
     v
 }
 
-// Calc plugin — evaluates simple math expressions using `meval`.
-pub struct CalcPlugin;
-impl Plugin for CalcPlugin {
-    fn name(&self) -> &str { "Calc" }
-    fn handle(&self, prompt: String, _db: SqlitePool) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-        Box::pin(async move {
-            let p = prompt.trim();
-            let lower = p.to_lowercase();
-            let expr = if lower.starts_with("calc ") { Some(p[5..].trim()) }
-                else if lower.starts_with("calculate ") { Some(p[10..].trim()) }
-                else if p.chars().all(|c| c.is_ascii() && (c.is_whitespace() || "0123456789.+-*/()%".contains(c))) { Some(p) }
-                else { None };
-
-            if let Some(e) = expr {
-                match meval::eval_str(e) {
-                    Ok(v) => Some(format!("{}", v)),
-                    Err(err) => Some(format!("Calculation error: {}", err)),
-                }
-            } else { None }
-        })
-    }
-}
-
-// Weather plugin — uses wttr.in for a lightweight no-key weather lookup.
-pub struct WeatherPlugin;
-impl Plugin for WeatherPlugin {
-    fn name(&self) -> &str { "Weather" }
-    fn handle(&self, prompt: String, _db: SqlitePool) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-        Box::pin(async move {
-            let lower = prompt.to_lowercase();
-            if lower.starts_with("weather") {
-                let parts: Vec<_> = prompt.splitn(2, ' ').collect();
-                let location = parts.get(1).map(|s| s.trim()).filter(|s| !s.is_empty()).unwrap_or("_");
-                let client = Client::new();
-                let url = format!("https://wttr.in/{}?format=3", urlencoding::encode(location));
-                if let Ok(resp) = client.get(&url).send().await {
-                    if let Ok(text) = resp.text().await { return Some(text); }
-                }
-                return Some("Failed to fetch weather.".to_string());
-            }
-            None
-        })
-    }
-}
-
-// NewsPlugin — lightweight top-stories fetch (keeps interface used by main)
-pub struct NewsPlugin;
-impl NewsPlugin { pub fn new() -> Self { Self } }
-impl Plugin for NewsPlugin {
-    fn name(&self) -> &str { "News" }
-    fn handle(&self, prompt: String, _db: SqlitePool) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-        Box::pin(async move {
-            let p = prompt.to_lowercase();
-            if p.contains("news") || p.contains("headlines") {
-                // Use Hacker News public API (no key)
-                let client = Client::new();
-                if let Ok(resp) = client.get("https://hacker-news.firebaseio.com/v0/topstories.json").send().await {
-                    if let Ok(ids) = resp.json::<Vec<u64>>().await {
-                        let mut headlines = Vec::new();
-                        for id in ids.into_iter().take(5) {
-                            let item_url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
-                            if let Ok(item_resp) = client.get(&item_url).send().await {
-                                if let Ok(item_json) = item_resp.json::<serde_json::Value>().await {
-                                    if let Some(title) = item_json["title"].as_str() {
-                                        let url = item_json["url"].as_str().unwrap_or("");
-                                        headlines.push(format!("- {} ({})", title, url));
-                                    }
-                                }
-                            }
-                        }
-                        if !headlines.is_empty() { return Some(format!("Latest headlines:\n{}", headlines.join("\n"))); }
-                    }
-                }
-                return Some("Failed to fetch news.".to_string());
-            }
-            None
-        })
-    }
-}
-
-// Memory plugin — simple key/value memory stored in `jeebs_store`.
-pub struct MemoryPlugin;
-impl Plugin for MemoryPlugin {
-    fn name(&self) -> &str { "Memory" }
-    fn handle(&self, prompt: String, db: SqlitePool) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-        Box::pin(async move {
-            let lower = prompt.to_lowercase();
-            if lower.starts_with("remember ") {
-                let rest = prompt[8..].trim();
-                if let Some((k, v)) = rest.split_once('=') {
-                    let key = format!("mem:{}", k.trim());
-                    let payload = json!({ "value": v.trim(), "created_at": Local::now().to_rfc3339() });
-                    if let Ok(bytes) = serde_json::to_vec(&payload) {
-                        if let Ok(enc) = encode_all(&bytes, 1) {
-                            let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)").bind(&key).bind(enc).execute(&db).await;
-                            return Some(format!("Remembered {}={}", k.trim(), v.trim()));
-                        }
-                    }
-                    return Some("Failed to store memory.".to_string());
-                }
-                return Some("Usage: remember KEY=VALUE".to_string());
-            } else if lower.starts_with("recall ") {
-                let key = prompt[7..].trim();
-                let full = format!("mem:{}", key);
-                if let Ok(Some(row)) = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?").bind(&full).fetch_optional(&db).await {
-                    let val: Vec<u8> = row.get(0);
-                    if let Ok(bytes) = decode_all(&val) {
-                        if let Ok(vj) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                            return Some(vj["value"].as_str().unwrap_or("").to_string());
-                        }
-                    }
-                }
-                return Some(format!("No memory found for '{}'.", key));
-            } else if lower.starts_with("memories") || lower.starts_with("list memories") {
-                if let Ok(rows) = sqlx::query("SELECT key, value FROM jeebs_store WHERE key LIKE 'mem:%'").fetch_all(&db).await {
-                    let items: Vec<String> = rows.into_iter().filter_map(|r| {
-                        let k: String = r.get(0);
-                        let val: Vec<u8> = r.get(1);
-                        decode_all(&val).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).and_then(|vj| vj["value"].as_str().map(|s| format!("{} -> {}", k.strip_prefix("mem:").unwrap_or(&k), s.to_string())))
-                    }).collect();
-                    return Some(format!("Memories:\n{}", items.join("\n")));
-                }
-                return Some("No memories found.".to_string());
-            }
-            None
-        })
-    }
-}
-
-// System plugin — returns basic system stats
-pub struct SystemPlugin;
-impl Plugin for SystemPlugin {
-    fn name(&self) -> &str { "System" }
-    fn handle(&self, prompt: String, _db: SqlitePool) -> Pin<Box<dyn Future<Output = Option<String>> + Send>> {
-        Box::pin(async move {
-            let p = prompt.to_lowercase();
-            if p.contains("system") || p.contains("cpu") || p.contains("ram") || p.contains("memory") {
-                let mut sys = System::new_all();
-                sys.refresh_all();
-                let total = sys.total_memory();
-                let free = sys.available_memory();
-                let used = total.saturating_sub(free);
-                return Some(format!("CPU cores: {} | Memory used: {} / {} KB", sys.cpus().len(), used, total));
-            }
-            None
-        })
-    }
-}
-
-// Summary plugin — trivial summarizer (first 2 sentences / truncated)
 pub struct SummaryPlugin;
 impl Plugin for SummaryPlugin {
     fn name(&self) -> &str { "Summary" }
@@ -891,5 +697,3 @@ impl Plugin for ErrorPlugin {
     }
 }
 
-// Dynamic plugin loader (no-op; runtime plugins may be added to `/plugins` directory)
-pub fn load_dynamic_plugins(_dir: &str) -> Vec<Box<dyn Plugin>> { Vec::new() }
