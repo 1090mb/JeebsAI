@@ -51,9 +51,16 @@ verify_native_deps() {
   fi
 
   # check libraries used by sequoia/nettle
-  for lib in nettle gpg-error gcrypt; do
-    if ! pkg-config --exists "$lib" 2>/dev/null; then
-      missing+=("pkg-config:$lib")
+  for lib in nettle gpg-error libgcrypt; do
+    # accept either 'libgcrypt' or legacy 'gcrypt' names where present
+    if [ "$lib" = "libgcrypt" ]; then
+      if ! pkg-config --exists libgcrypt 2>/dev/null && ! pkg-config --exists gcrypt 2>/dev/null; then
+        missing+=("pkg-config:libgcrypt")
+      fi
+    else
+      if ! pkg-config --exists "$lib" 2>/dev/null; then
+        missing+=("pkg-config:$lib")
+      fi
     fi
   done
 
