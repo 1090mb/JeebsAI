@@ -30,6 +30,14 @@ else
   echo "Found rustc $ver"
 fi
 
+# Install required native build dependencies (nettle / sequoia, compilers, pkg-config)
+if command -v apt-get >/dev/null 2>&1; then
+  echo "Installing native build dependencies via apt..."
+  sudo apt-get update
+  sudo apt-get install -y build-essential clang pkg-config libssl-dev sqlite3 git curl ca-certificates \
+    nettle-dev libgpg-error-dev libgcrypt-dev
+fi
+
 echo "Building JeebsAI (Release)..."
 cargo build --release
 
