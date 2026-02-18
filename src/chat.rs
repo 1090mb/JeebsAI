@@ -68,10 +68,7 @@ pub fn start_cli(data: web::Data<AppState>) {
         let stdin = std::io::stdin();
         let mut input = String::new();
         loop {
-            print!(
-                "
-Enter a prompt (or 'exit'): "
-            );
+            print!("Enter a prompt (or 'exit'): ");
             std::io::stdout().flush().unwrap();
             input.clear();
             stdin.read_line(&mut input).unwrap();
