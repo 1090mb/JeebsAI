@@ -21,6 +21,21 @@ fi
 DEST="$1"
 REMOTE_DIR="${2:-/opt/jeebs}"
 SSH_KEY=""
+SSH_PASS=""
+
+if [ -n "$SSH_PASS" ]; then
+  if ! command -v sshpass >/dev/null 2>&1; then
+    echo "sshpass required for password auth. Install it and retry." >&2
+    exit 1
+  fi
+  sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no ${SSH_OPTS[@]} "$TMPDIR/jeebs-deploy.tar.gz" "${DEST}:/tmp/jeebs-deploy.tar.gz"
+  echo "Installing on remote host..."
+  sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no ${SSH_OPTS[@]} "${DEST}" bash -s <<'REMOTE'
+else
+  scp ${SSH_OPTS[@]} "$TMPDIR/jeebs-deploy.tar.gz" "${DEST}:/tmp/jeebs-deploy.tar.gz"
+  echo "Installing on remote host..."
+  ssh ${SSH_OPTS[@]} "${DEST}" bash -s <<'REMOTE'
+fi
 
 shift || true
 shift || true
@@ -29,6 +44,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -i|--identity)
       SSH_KEY="$2"; shift 2;;
+    -p|--password)
+      SSH_PASS="$2"; shift 2;;
     -h|--help)
       usage;;
     *) echo "Unknown arg: $1"; usage;;
