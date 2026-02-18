@@ -33,6 +33,11 @@ jobs:
         id: owner
         run: echo "owner_lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
+      - name: Show computed tags
+        run: |
+          echo "OWNER_LOWER=${{ steps.owner.outputs.owner_lower }}"
+          echo "TAGS=ghcr.io/${{ steps.owner.outputs.owner_lower }}/jeebs:latest, ghcr.io/${{ steps.owner.outputs.owner_lower }}/jeebs:${{ github.sha }}"
+
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:

@@ -4,7 +4,8 @@
 JeebsAI is a Rust-based AI assistant with a lightweight web UI and SQLite-backed storage.
 This repository already includes a production `Dockerfile` and `docker-compose.yml`.
 
-Official container image: `ghcr.io/Deployed-Labs/jeebs:latest` — pull instead of building if you prefer.
+Official container image: `ghcr.io/deployed-labs/jeebs:latest` — pull instead of building if you prefer. (published by CI to GHCR)
+
 
 ---
 
