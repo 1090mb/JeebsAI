@@ -64,7 +64,7 @@ async fn main() -> std::io::Result<()> {
 
 	// Ensure admin account exists
 	auth::ensure_admin_exists(&db).await;
-	auth::ensure_user(&db, "1090mb", "ewah", "admin").await;
+	auth::ensure_pgp_user(&db, "1090mb", "1090mb@protonmail.com", "admin").await;
 
 	// Initialize Logging (Database)
 	logging::init(&db).await;
@@ -176,6 +176,7 @@ async fn main() -> std::io::Result<()> {
 				.app_data(state.clone())
 				.service(auth::register)
 				.service(auth::login)
+				.service(auth::login_pgp)
 				.service(auth::logout)
 				.service(auth::request_reset)
 				.service(auth::reset_password)
