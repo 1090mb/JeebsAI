@@ -198,9 +198,10 @@ async fn main() -> std::io::Result<()> {
                     .map(|a| a.ip().to_string())
                     .unwrap_or_default();
                 if state.ip_blacklist.read().unwrap().contains(&ip) {
-                    return Box::pin(async {
-                        Ok(req.error_response(actix_web::error::ErrorForbidden("IP Blacklisted")))
-                    });
+                    // Build a response synchronously and return a ready future so we don't
+                    // capture the non-Send `ServiceRequest` inside an async block.
+                    let resp = HttpResponse::Forbidden().json(serde_json::json!({ "error": "IP Blacklisted" }));
+                    return Box::pin(futures_util::future::ready(Ok(req.into_response(resp))));
                 }
                 srv.call(req)
             })

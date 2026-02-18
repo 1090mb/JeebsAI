@@ -226,6 +226,8 @@ pub async fn admin_crawl(
                     // Offload HTML parsing to a blocking thread so `scraper::Html` (which
                     // is not `Send`) never becomes part of the async future captured by
                     // `tokio::spawn`.
+                    // Clone `url` for the blocking closure so the outer `url` remains available
+                    let url_clone = url.clone();
                     let parse_result = tokio::task::spawn_blocking(move || {
                         let doc = Html::parse_document(&body);
 
@@ -233,7 +235,7 @@ pub async fn admin_crawl(
                             .select(&Selector::parse("title").unwrap())
                             .next()
                             .map(|e| e.text().collect::<String>())
-                            .unwrap_or_else(|| url.clone());
+                            .unwrap_or_else(|| url_clone.clone());
 
                         let mut text = String::new();
                         if let Ok(selector) = Selector::parse("p") {

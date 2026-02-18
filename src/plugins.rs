@@ -386,6 +386,7 @@ impl Plugin for ExternalCliPlugin {
                 }
 
                 // enforce a short timeout for plugin execution
+                let pid = child.id();
                 match timeout(Duration::from_secs(3), child.wait_with_output()).await {
                     Ok(Ok(output)) => {
                         if !output.status.success() {
@@ -408,11 +409,17 @@ impl Plugin for ExternalCliPlugin {
                         None
                     }
                     Ok(Err(e)) => {
-                        let _ = child.kill().await;
+                        // waiting returned an I/O error; try to kill by PID if available
+                        if let Some(p) = pid {
+                            let _ = Command::new("kill").arg("-9").arg(p.to_string()).status().await;
+                        }
                         Some(format!("plugin '{}' execution error: {}", self.name, e))
                     }
                     Err(_) => {
-                        let _ = child.kill().await;
+                        // timeout: kill process by PID if possible
+                        if let Some(p) = pid {
+                            let _ = Command::new("kill").arg("-9").arg(p.to_string()).status().await;
+                        }
                         Some(format!("plugin '{}' timed out", self.name))
                     }
                 }
