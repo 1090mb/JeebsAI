@@ -1,10 +1,10 @@
-use async_trait::async_trait;
 use crate::plugins::Plugin;
 use crate::state::AppState;
 use aes_gcm::{
+    Aes256Gcm, Nonce,
     aead::{Aead, AeadCore, KeyInit, OsRng},
-    Aes256Gcm, Nonce
 };
+use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose};
 use std::env;
 
@@ -40,7 +40,9 @@ fn get_key() -> [u8; 32] {
     let key_str = match env::var("JEEBS_SECRET_KEY") {
         Ok(k) => k,
         Err(_) => {
-            eprintln!("[WARN] JEEBS_SECRET_KEY not set, using insecure default key. Set JEEBS_SECRET_KEY for production use.");
+            eprintln!(
+                "[WARN] JEEBS_SECRET_KEY not set, using insecure default key. Set JEEBS_SECRET_KEY for production use."
+            );
             "01234567890123456789012345678901".to_string()
         }
     };
@@ -55,7 +57,8 @@ pub fn encrypt(data: &str) -> Result<String, String> {
     let key = get_key();
     let cipher = Aes256Gcm::new(&key.into());
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    let ciphertext = cipher.encrypt(&nonce, data.as_bytes())
+    let ciphertext = cipher
+        .encrypt(&nonce, data.as_bytes())
         .map_err(|e| format!("{}", e))?;
 
     let mut combined = nonce.to_vec();
@@ -66,10 +69,16 @@ pub fn encrypt(data: &str) -> Result<String, String> {
 pub fn decrypt(encrypted_data: &str) -> Result<String, String> {
     let key = get_key();
     let cipher = Aes256Gcm::new(&key.into());
-    let decoded = general_purpose::STANDARD.decode(encrypted_data).map_err(|e| format!("{}", e))?;
-    if decoded.len() < 12 { return Err("Data too short".to_string()); }
+    let decoded = general_purpose::STANDARD
+        .decode(encrypted_data)
+        .map_err(|e| format!("{}", e))?;
+    if decoded.len() < 12 {
+        return Err("Data too short".to_string());
+    }
     let nonce = Nonce::from_slice(&decoded[..12]);
     let ciphertext = &decoded[12..];
-    let plaintext = cipher.decrypt(nonce, ciphertext).map_err(|e| format!("{}", e))?;
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|e| format!("{}", e))?;
     String::from_utf8(plaintext).map_err(|e| format!("{}", e))
 }
