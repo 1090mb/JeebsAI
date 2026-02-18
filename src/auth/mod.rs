@@ -1,4 +1,3 @@
-use crate::plugins::Plugin;
 use crate::state::AppState;
 use crate::utils::{decode_all, encode_all};
 use actix_multipart::Multipart;

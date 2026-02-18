@@ -90,7 +90,7 @@ impl Cortex {
         response
     }
 
-    pub async fn dream(db: SqlitePool) {
+    pub async fn dream(_db: SqlitePool) {
         loop {
             // Dream logic here
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;

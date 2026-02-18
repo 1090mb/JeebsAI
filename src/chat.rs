@@ -3,7 +3,7 @@ use actix_web::{HttpRequest, HttpResponse, Responder, post, web};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::{Row, SqlitePool};
+use sqlx::SqlitePool;
 use std::io::{self, Write};
 
 use crate::cortex::Cortex;
