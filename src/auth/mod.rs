@@ -589,6 +589,76 @@ pub async fn change_password(
     HttpResponse::InternalServerError().json(json!({"error": "User not found"}))
 }
 
+// --- Update email endpoint (used by main.rs router) ---
+#[derive(Deserialize)]
+pub struct UpdateEmailRequest {
+    pub new_email: String,
+    pub password: String,
+}
+
+#[post("/api/update_email")]
+pub async fn update_email(
+    data: web::Data<AppState>,
+    req: web::Json<UpdateEmailRequest>,
+    session: Session,
+) -> impl Responder {
+    let username = match session.get::<String>("username") {
+        Ok(Some(u)) => u,
+        _ => return HttpResponse::Unauthorized().json(json!({"error": "Not logged in"})),
+    };
+
+    let user_key = format!("user:{}", username);
+    if let Ok(Some(row)) = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
+        .bind(&user_key)
+        .fetch_optional(&data.db)
+        .await
+    {
+        let val: Vec<u8> = row.get(0);
+        if let Ok(mut user_json) = serde_json::from_slice::<serde_json::Value>(&val) {
+            // Verify password
+            let stored_hash = user_json["password"].as_str().unwrap_or("");
+            let parsed_hash = match PasswordHash::new(stored_hash) {
+                Ok(h) => h,
+                Err(_) => {
+                    return HttpResponse::InternalServerError()
+                        .json(json!({"error": "Invalid password hash"}));
+                }
+            };
+
+            if Argon2::default()
+                .verify_password(req.password.as_bytes(), &parsed_hash)
+                .is_err()
+            {
+                return HttpResponse::BadRequest().json(json!({"error": "Incorrect password"}));
+            }
+
+            // Update email
+            user_json["email"] = serde_json::Value::String(req.new_email.clone());
+
+            if let Ok(user_bytes) = serde_json::to_vec(&user_json) {
+                if sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+                    .bind(&user_key)
+                    .bind(user_bytes)
+                    .execute(&data.db)
+                    .await
+                    .is_ok()
+                {
+                    crate::logging::log(
+                        &data.db,
+                        "INFO",
+                        "AUTH",
+                        &format!("User {} updated email", username),
+                    )
+                    .await;
+                    return HttpResponse::Ok().json(json!({"ok": true}));
+                }
+            }
+        }
+    }
+
+    HttpResponse::InternalServerError().json(json!({"error": "User not found or update failed"}))
+}
+
 #[post("/api/upload_avatar")]
 pub async fn upload_avatar(
     data: web::Data<AppState>,

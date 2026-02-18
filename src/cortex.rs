@@ -170,15 +170,11 @@ async fn custom_ai_logic(prompt: &str, db: &sqlx::SqlitePool) -> String {
     let facts: Vec<String> = triples_results
         .into_iter()
         .enumerate()
-        .flat_map(|(i, result)| match result {
-            Ok(triples) => triples
+        .flat_map(|(_i, triples)| {
+            triples
                 .into_iter()
                 .map(|t| format!("- {} {} {}.", t.subject, t.predicate, t.object))
-                .collect(),
-            Err(e) => {
-                log::error!("Failed to get triples for keyword '{}': {}", keywords[i], e);
-                vec![]
-            }
+                .collect::<Vec<_>>()
         })
         .collect();
 

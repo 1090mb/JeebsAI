@@ -1,4 +1,3 @@
-use crate::logging::get_log_buffer;
 use actix_session::Session;
 use actix_web::{HttpResponse, Responder, get};
 use serde_json::json;

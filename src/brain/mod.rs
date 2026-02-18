@@ -7,7 +7,7 @@ use meval;
 use reqwest;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
-use sqlx::{Row, SqlitePool};
+use sqlx::{Row, SqlitePool, FromRow};
 use std::collections::HashSet;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -223,19 +223,35 @@ pub async fn admin_crawl(
                 if let Ok(body) = res.text().await {
                     let doc = Html::parse_document(&body);
 
-                    let title = doc
-                        .select(&Selector::parse("title").unwrap())
-                        .next()
-                        .map(|e| e.text().collect::<String>())
-                        .unwrap_or_else(|| url.clone());
-                    let mut text = String::new();
-                    if let Ok(selector) = Selector::parse("p") {
-                        for el in doc.select(&selector) {
-                            text.push_str(&el.text().collect::<Vec<_>>().join(" "));
-                            text.push(' ');
+                    // Parse HTML and extract the pieces we need *before* any `.await` so
+                    // non-Send scraper types don't get captured across await points.
+                    let (title, summary, links): (String, String, Vec<String>) = {
+                        let doc = Html::parse_document(&body);
+                        let title = doc
+                            .select(&Selector::parse("title").unwrap())
+                            .next()
+                            .map(|e| e.text().collect::<String>())
+                            .unwrap_or_else(|| url.clone());
+                        let mut text = String::new();
+                        if let Ok(selector) = Selector::parse("p") {
+                            for el in doc.select(&selector) {
+                                text.push_str(&el.text().collect::<Vec<_>>().join(" "));
+                                text.push(' ');
+                            }
                         }
-                    }
-                    let summary: String = text.chars().take(600).collect();
+                        let summary: String = text.chars().take(600).collect();
+
+                        // Collect links as plain Strings so we don't hold `doc` across awaits.
+                        let mut links = Vec::new();
+                        if let Ok(selector) = Selector::parse("a[href]") {
+                            for element in doc.select(&selector) {
+                                if let Some(href) = element.value().attr("href") {
+                                    links.push(href.to_string());
+                                }
+                            }
+                        }
+                        (title, summary, links)
+                    };
 
                     let id = blake3::hash(url.as_bytes()).to_hex().to_string();
                     let node = BrainNode {
@@ -247,21 +263,19 @@ pub async fn admin_crawl(
                         last_trained: chrono::Local::now().to_rfc3339(),
                         created_at: Some(chrono::Local::now().to_rfc3339()),
                     };
+
+                    // Now it's safe to `.await` because `doc` was dropped above.
                     store_brain_node(&db, &node).await;
                     pages_crawled += 1;
 
                     if depth < max_depth {
-                        if let Ok(selector) = Selector::parse("a[href]") {
-                            for element in doc.select(&selector) {
-                                if let Some(href) = element.value().attr("href") {
-                                    if href.starts_with("http") {
-                                        queue.push_back((href.to_string(), depth + 1));
-                                    } else if href.starts_with("/") {
-                                        if let Ok(base) = reqwest::Url::parse(&url) {
-                                            if let Ok(joined) = base.join(href) {
-                                                queue.push_back((joined.to_string(), depth + 1));
-                                            }
-                                        }
+                        for href in links {
+                            if href.starts_with("http") {
+                                queue.push_back((href.to_string(), depth + 1));
+                            } else if href.starts_with("/") {
+                                if let Ok(base) = reqwest::Url::parse(&url) {
+                                    if let Ok(joined) = base.join(&href) {
+                                        queue.push_back((joined.to_string(), depth + 1));
                                     }
                                 }
                             }
@@ -311,6 +325,27 @@ pub async fn search_brain(
         .collect();
 
     HttpResponse::Ok().json(nodes)
+}
+
+/// Search knowledge nodes by label/summary. Returns Result so callers can handle DB errors.
+pub async fn search_knowledge(db: &SqlitePool, query: &str) -> Result<Vec<BrainNode>, sqlx::Error> {
+    let term = format!("%{}%", query);
+    let rows = sqlx::query("SELECT data FROM brain_nodes WHERE label LIKE ? OR summary LIKE ? LIMIT 20")
+        .bind(&term)
+        .bind(&term)
+        .fetch_all(db)
+        .await?;
+
+    let mut nodes = Vec::new();
+    for row in rows {
+        let val: Vec<u8> = row.get(0);
+        if let Ok(decompressed) = decode_all(&val) {
+            if let Ok(node) = serde_json::from_slice::<BrainNode>(&decompressed) {
+                nodes.push(node);
+            }
+        }
+    }
+    Ok(nodes)
 }
 
 #[post("/api/admin/reindex")]
