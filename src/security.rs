@@ -37,7 +37,13 @@ impl Plugin for SecurityPlugin {
 }
 
 fn get_key() -> [u8; 32] {
-    let key_str = env::var("JEEBS_SECRET_KEY").unwrap_or_else(|_| "01234567890123456789012345678901".to_string());
+    let key_str = match env::var("JEEBS_SECRET_KEY") {
+        Ok(k) => k,
+        Err(_) => {
+            eprintln!("[WARN] JEEBS_SECRET_KEY not set, using insecure default key. Set JEEBS_SECRET_KEY for production use.");
+            "01234567890123456789012345678901".to_string()
+        }
+    };
     let mut key = [0u8; 32];
     let bytes = key_str.as_bytes();
     let len = bytes.len().min(32);
