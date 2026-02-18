@@ -29,6 +29,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lowercase owner
+        id: owner
+        run: echo "owner_lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
@@ -37,5 +41,5 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/${{ toLower(github.repository_owner) }}/jeebs:latest
-            ghcr.io/${{ toLower(github.repository_owner) }}/jeebs:${{ github.sha }}
+            ghcr.io/${{ steps.owner.outputs.owner_lower }}/jeebs:latest
+            ghcr.io/${{ steps.owner.outputs.owner_lower }}/jeebs:${{ github.sha }}
