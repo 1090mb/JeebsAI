@@ -223,15 +223,18 @@ pub async fn admin_crawl(
                 if let Ok(body) = res.text().await {
                     let doc = Html::parse_document(&body);
 
-                    // Parse HTML and extract the pieces we need *before* any `.await` so
-                    // non-Send scraper types don't get captured across await points.
-                    let (title, summary, links): (String, String, Vec<String>) = {
+                    // Offload HTML parsing to a blocking thread so `scraper::Html` (which
+                    // is not `Send`) never becomes part of the async future captured by
+                    // `tokio::spawn`.
+                    let parse_result = tokio::task::spawn_blocking(move || {
                         let doc = Html::parse_document(&body);
+
                         let title = doc
                             .select(&Selector::parse("title").unwrap())
                             .next()
                             .map(|e| e.text().collect::<String>())
                             .unwrap_or_else(|| url.clone());
+
                         let mut text = String::new();
                         if let Ok(selector) = Selector::parse("p") {
                             for el in doc.select(&selector) {
@@ -241,7 +244,6 @@ pub async fn admin_crawl(
                         }
                         let summary: String = text.chars().take(600).collect();
 
-                        // Collect links as plain Strings so we don't hold `doc` across awaits.
                         let mut links = Vec::new();
                         if let Ok(selector) = Selector::parse("a[href]") {
                             for element in doc.select(&selector) {
@@ -250,8 +252,13 @@ pub async fn admin_crawl(
                                 }
                             }
                         }
+
                         (title, summary, links)
-                    };
+                    })
+                    .await
+                    .unwrap_or_else(|_| (url.clone(), String::new(), Vec::new()));
+
+                    let (title, summary, links) = parse_result;
 
                     let id = blake3::hash(url.as_bytes()).to_hex().to_string();
                     let node = BrainNode {
@@ -264,7 +271,6 @@ pub async fn admin_crawl(
                         created_at: Some(chrono::Local::now().to_rfc3339()),
                     };
 
-                    // Now it's safe to `.await` because `doc` was dropped above.
                     store_brain_node(&db, &node).await;
                     pages_crawled += 1;
 
