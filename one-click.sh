@@ -63,7 +63,8 @@ open_ufw_port() {
 
 apt-get update
 apt-get install -y \
-  build-essential pkg-config libssl-dev sqlite3 git curl ca-certificates
+  build-essential clang pkg-config libssl-dev sqlite3 git curl ca-certificates \
+  nettle-dev libgpg-error-dev libgcrypt-dev
 
 if [[ -n "$DOMAIN" ]]; then
   apt-get install -y nginx certbot python3-certbot-nginx
