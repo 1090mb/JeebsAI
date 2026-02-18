@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     libsqlite3-dev \
-    libnettle-dev \
+    nettle-dev \
     libgpg-error-dev \
     libgcrypt-dev \
     && rm -rf /var/lib/apt/lists/*
