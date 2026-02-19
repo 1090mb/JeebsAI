@@ -9,13 +9,16 @@ After=network.target
 
 [Service]
 Type=simple
-# Run as a standard user since Nginx handles port 80/443.
-# Replace 'your_username' with your actual Linux username.
-User=your_username
-WorkingDirectory=/path/to/JeebsAI-1
-ExecStart=/path/to/JeebsAI-1/target/release/jeebs
+# Set to the account that owns the code/binary. For a root-owned deploy, use root.
+User=root
+Group=root
+WorkingDirectory=/root/JeebsAI
+ExecStart=/root/JeebsAI/target/release/jeebs
+EnvironmentFile=-/etc/jeebs/config.env
 Restart=always
 RestartSec=5
+StandardOutput=append:/var/log/jeebs.log
+StandardError=append:/var/log/jeebs.log
 
 [Install]
 WantedBy=multi-user.target
