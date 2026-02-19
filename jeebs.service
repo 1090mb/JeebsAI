@@ -11,11 +11,14 @@ After=network.target
 Type=simple
 # Set to the account that owns the code/binary. For a root-owned deploy, use root.
 User=root
+Group=root
 WorkingDirectory=/root/JeebsAI
 ExecStart=/root/JeebsAI/target/release/jeebs
 EnvironmentFile=-/etc/jeebs/config.env
 Restart=always
 RestartSec=5
+StandardOutput=append:/var/log/jeebs.log
+StandardError=append:/var/log/jeebs.log
 
 [Install]
 WantedBy=multi-user.target
