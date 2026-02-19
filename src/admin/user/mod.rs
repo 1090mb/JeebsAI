@@ -1,8 +1,6 @@
 use crate::state::AppState;
 use actix_session::Session;
 use actix_web::{delete, get, post, web, HttpResponse, Responder};
-use argon2::{Argon2, PasswordHasher};
-use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
@@ -105,12 +103,9 @@ pub async fn admin_reset_user_password(
     {
         let val: Vec<u8> = row.get(0);
         if let Ok(mut user_json) = serde_json::from_slice::<serde_json::Value>(&val) {
-            let salt = argon2::password_hash::SaltString::generate(&mut OsRng);
-            let hash = Argon2::default()
-                .hash_password(req.new_password.as_bytes(), &salt)
-                .unwrap()
-                .to_string();
-            user_json["password"] = serde_json::Value::String(hash);
+            // Switch to PGP-only accounts: clear any stored password and mark as PGP
+            user_json["password"] = serde_json::Value::String("".to_string());
+            user_json["auth_type"] = serde_json::Value::String("pgp".to_string());
 
             sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
                 .bind(&user_key)
