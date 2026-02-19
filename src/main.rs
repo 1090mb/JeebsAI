@@ -21,7 +21,7 @@ async fn main() -> std::io::Result<()> {
     }
 
     let pool: SqlitePool = sqlx::sqlite::SqlitePoolOptions::new()
-        .connect(database_url)
+        .connect(&database_url)
         .await
         .expect("DB Fail");
 
