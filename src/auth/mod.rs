@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use crate::state::AppState;
 use sqlx::Row;
-use argon2::{Argon2};
-use argon2::password_hash::{PasswordHash, PasswordVerifier};
+use chrono::Utc;
+
+mod pgp;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -19,54 +20,81 @@ pub struct RegisterRequest {
     pub password: String,
 }
 
+#[derive(Deserialize)]
+pub struct PgpLoginRequest {
+    pub username: String,
+    pub signed_message: String,
+    pub remember_me: Option<bool>,
+}
+
 #[post("/api/login")]
 pub async fn login(
+    _data: web::Data<AppState>,
+    _req: web::Json<LoginRequest>,
+    _session: Session,
+) -> impl Responder {
+    // Password-based logins have been removed. All accounts must use PGP-based
+    // authentication. Respond with a clear indicator so clients can switch flows.
+    HttpResponse::BadRequest().json(json!({"error": "Password login disabled. Use PGP authentication", "use_pgp": true}))
+}
+
+#[post("/api/login_pgp")]
+pub async fn login_pgp(
     data: web::Data<AppState>,
-    req: web::Json<LoginRequest>,
+    req: web::Json<PgpLoginRequest>,
     session: Session,
 ) -> impl Responder {
-    // Users are stored in `jeebs_store` under key `user:{username}` as JSON blob.
-    let user_key = format!("user:{}", req.username);
-    let row = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
-        .bind(&user_key)
-        .fetch_optional(&data.db)
-        .await;
+    // Verify PGP signature using the helper in src/auth/pgp.rs
+    let verified = match crate::auth::pgp::verify_signature(&req.signed_message) {
+        Ok(s) => s,
+        Err(e) => return HttpResponse::Unauthorized().json(json!({"error": format!("Signature verification failed: {}", e)})),
+    };
 
-    match row {
-        Ok(Some(r)) => {
-            let val: Vec<u8> = r.get(0);
+    // Expect format: LOGIN:username:timestamp
+    let parts: Vec<&str> = verified.trim().split(':').collect();
+    if parts.len() != 3 || parts[0] != "LOGIN" {
+        return HttpResponse::BadRequest().json(json!({"error": "Signed message has invalid format"}));
+    }
+    let username = parts[1];
+    if username != req.username {
+        return HttpResponse::BadRequest().json(json!({"error": "Signed username mismatch"}));
+    }
+
+    let ts = match parts[2].parse::<i64>() {
+        Ok(v) => v,
+        Err(_) => return HttpResponse::BadRequest().json(json!({"error": "Invalid timestamp in signed message"})),
+    };
+
+    let now = Utc::now().timestamp();
+    if (now - ts).abs() > 300 {
+        return HttpResponse::Unauthorized().json(json!({"error": "Signed message timestamp is outside allowed window"}));
+    }
+
+    // At this point the signature is valid and fresh. Grant session and admin if appropriate.
+    let uname = req.username.clone();
+    let _ = session.insert("username", uname.clone());
+
+    // Determine admin status: if username == "1090mb" or user role in jeebs_store == "admin"
+    let mut is_admin = false;
+    if uname == "1090mb" {
+        is_admin = true;
+    } else {
+        let user_key = format!("user:{}", uname);
+        if let Ok(Some(row)) = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
+            .bind(&user_key)
+            .fetch_optional(&data.db)
+            .await
+        {
+            let val: Vec<u8> = row.get(0);
             if let Ok(user_json) = serde_json::from_slice::<serde_json::Value>(&val) {
-                // If account is PGP-only, instruct client to use PGP flow
-                if user_json.get("auth_type").and_then(|v| v.as_str()) == Some("pgp") {
-                    return HttpResponse::BadRequest().json(json!({"error": "This account requires PGP authentication", "use_pgp": true}));
+                if user_json.get("role").and_then(|v| v.as_str()) == Some("admin") {
+                    is_admin = true;
                 }
-
-                let stored = user_json.get("password").and_then(|v| v.as_str()).unwrap_or("");
-                if stored.is_empty() {
-                    return HttpResponse::Unauthorized().json(json!({"error": "User has no password set"}));
-                }
-
-                // Verify Argon2 password hash
-                match PasswordHash::new(stored) {
-                    Ok(parsed_hash) => {
-                        let verifier = Argon2::default();
-                        if verifier.verify_password(req.password.as_bytes(), &parsed_hash).is_ok() {
-                            // Successful login: store username in session
-                            let _ = session.insert("username", req.username.clone());
-                            let role = user_json.get("role").and_then(|v| v.as_str()).unwrap_or("user");
-                            let is_admin = role == "admin";
-                            let _ = session.insert("is_admin", is_admin);
-                            return HttpResponse::Ok().json(json!({"status": "success", "user": req.username, "token": ""}));
-                        } else {
-                            return HttpResponse::Unauthorized().json(json!({"error": "Invalid password"}));
-                        }
-                    }
-                    Err(_) => return HttpResponse::InternalServerError().json(json!({"error": "Malformed password hash"})),
-                }
-            } else {
-                return HttpResponse::InternalServerError().json(json!({"error": "Cannot parse user data"}));
             }
         }
-        _ => HttpResponse::Unauthorized().json(json!({"error": "User not found"})),
     }
+
+    let _ = session.insert("is_admin", is_admin);
+
+    HttpResponse::Ok().json(json!({"status": "success", "user": uname, "is_admin": is_admin}))
 }
