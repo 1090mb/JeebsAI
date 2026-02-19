@@ -13,10 +13,11 @@ async fn main() -> std::io::Result<()> {
 
     // Ensure the SQLite directory exists if using a file path
     if let Some(path_str) = database_url.strip_prefix("sqlite:") {
-        let db_path = path_str.trim_start_matches('/');
-        let path = Path::new(db_path);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).ok();
+        if !path_str.is_empty() && path_str != ":memory:" {
+            let path = Path::new(path_str);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
         }
     }
 
@@ -39,7 +40,12 @@ async fn main() -> std::io::Result<()> {
         internet_enabled: std::sync::Arc::new(std::sync::RwLock::new(false)),
     });
 
-    println!("Jeebs is awake on port 8080");
+    let port: u16 = env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(8080);
+
+    println!("Jeebs is awake on port {}", port);
 
     // Session cookie secret
     let secret_key = Key::generate();
@@ -51,7 +57,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(state.clone())
                 .service(auth::login_pgp)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("127.0.0.1", port))?
     .run()
     .await
 }
