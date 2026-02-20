@@ -1,16 +1,19 @@
-use actix_web::{post, web, HttpResponse, Responder};
 use actix_session::Session;
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use actix_web::{get, post, web, HttpResponse, Responder};
 use chrono::Utc;
-use crate::state::AppState;
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
+use std::env;
+
+use crate::state::AppState;
 
 mod pgp;
 
-#[derive(Serialize, Deserialize)]
+const DEFAULT_JWT_SECRET: &str = "jeebs-secret-key-change-in-production";
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TokenClaims {
     pub username: String,
     pub is_admin: bool,
@@ -18,27 +21,75 @@ pub struct TokenClaims {
     pub exp: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub email: Option<String>,
+    pub pgp_public_key: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PgpLoginRequest {
     pub username: String,
     pub signed_message: String,
     pub remember_me: Option<bool>,
 }
 
-#[derive(Deserialize)]
-pub struct LoginRequest {
+#[derive(Debug, Deserialize)]
+pub struct LoginAliasRequest {
     pub username: String,
-    pub password: String,
+    pub signed_message: Option<String>,
     pub remember_me: Option<bool>,
 }
 
-#[post("/api/login")]
-pub async fn login(
-    data: web::Data<AppState>,
-    req: web::Json<LoginRequest>,
-    session: Session,
-) -> impl Responder {
-    let user_key = format!("user:{}", req.username);
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AuthStatusResponse {
+    pub logged_in: bool,
+    pub username: Option<String>,
+    pub is_admin: bool,
+    pub token: Option<String>,
+}
+
+fn valid_username(username: &str) -> bool {
+    let len = username.chars().count();
+    if !(3..=32).contains(&len) {
+        return false;
+    }
+
+    username
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+}
+
+fn issue_token(username: &str, is_admin: bool) -> Result<String, String> {
+    let now = Utc::now().timestamp();
+    let claims = TokenClaims {
+        username: username.to_string(),
+        is_admin,
+        iat: now,
+        exp: now + 60 * 60 * 24 * 30,
+    };
+
+    let secret = env::var("JWT_SECRET").unwrap_or_else(|_| DEFAULT_JWT_SECRET.to_string());
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|e| format!("Failed to issue token: {e}"))
+}
+
+async fn handle_pgp_login(
+    data: &web::Data<AppState>,
+    req: &PgpLoginRequest,
+    session: &Session,
+) -> HttpResponse {
+    let username = req.username.trim();
+    if !valid_username(username) {
+        return HttpResponse::BadRequest().json(json!({"error": "Invalid username format"}));
+    }
+
+    let user_key = format!("user:{username}");
     let row = match sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
         .bind(&user_key)
         .fetch_optional(&data.db)
@@ -51,49 +102,65 @@ pub async fn login(
     };
 
     let Some(row) = row else {
-        return HttpResponse::Unauthorized().json(json!({"error": "Invalid credentials"}));
+        return HttpResponse::Unauthorized().json(json!({"error": "Unknown username"}));
     };
 
     let val: Vec<u8> = row.get(0);
     let user_json = match serde_json::from_slice::<serde_json::Value>(&val) {
         Ok(v) => v,
         Err(_) => {
-            return HttpResponse::Unauthorized().json(json!({"error": "Invalid credentials"}));
+            return HttpResponse::InternalServerError()
+                .json(json!({"error": "Corrupted user record"}));
         }
     };
 
-    if user_json.get("auth_type").and_then(|v| v.as_str()) == Some("pgp") {
+    if user_json.get("auth_type").and_then(|v| v.as_str()) != Some("pgp") {
         return HttpResponse::BadRequest().json(json!({
-            "error": "This account requires PGP authentication",
-            "use_pgp": true
+            "error": "This account does not support PGP login"
         }));
     }
 
-    let stored_password = user_json
-        .get("password")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default();
-    if stored_password.is_empty() {
-        return HttpResponse::Unauthorized().json(json!({"error": "Invalid credentials"}));
-    }
-
-    let password_valid = if stored_password.starts_with("$argon2") {
-        match PasswordHash::new(stored_password) {
-            Ok(parsed) => Argon2::default()
-                .verify_password(req.password.as_bytes(), &parsed)
-                .is_ok(),
-            Err(_) => false,
+    let public_key = match user_json.get("pgp_public_key").and_then(|v| v.as_str()) {
+        Some(v) if !v.trim().is_empty() => v.trim(),
+        _ => {
+            return HttpResponse::BadRequest().json(json!({
+                "error": "No PGP key registered for this account"
+            }));
         }
-    } else {
-        stored_password == req.password
     };
 
-    if !password_valid {
-        return HttpResponse::Unauthorized().json(json!({"error": "Invalid credentials"}));
+    let verified = match crate::auth::pgp::verify_signature_with_public_key(
+        &req.signed_message,
+        public_key,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return HttpResponse::Unauthorized().json(json!({
+                "error": format!("Signature verification failed: {e}")
+            }));
+        }
+    };
+
+    let parts: Vec<&str> = verified.trim().split(':').collect();
+    if parts.len() != 3 || parts[0] != "LOGIN" {
+        return HttpResponse::BadRequest().json(json!({"error": "Signed message format is invalid"}));
+    }
+    if parts[1] != username {
+        return HttpResponse::BadRequest().json(json!({"error": "Signed username mismatch"}));
     }
 
-    if session.insert("username", &req.username).is_err() {
-        return HttpResponse::InternalServerError().json(json!({"error": "Session error"}));
+    let ts = match parts[2].parse::<i64>() {
+        Ok(v) => v,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({"error": "Invalid signed timestamp"}));
+        }
+    };
+
+    let now = Utc::now().timestamp();
+    if ts < now - 300 || ts > now + 60 {
+        return HttpResponse::Unauthorized().json(json!({
+            "error": "Signed timestamp is outside the allowed window"
+        }));
     }
 
     let role = user_json
@@ -101,7 +168,17 @@ pub async fn login(
         .and_then(|v| v.as_str())
         .unwrap_or("user");
     let is_admin = role == "admin";
-    if session.insert("is_admin", is_admin).is_err() {
+
+    let token = match issue_token(username, is_admin) {
+        Ok(v) => v,
+        Err(e) => return HttpResponse::InternalServerError().json(json!({"error": e})),
+    };
+
+    if session.insert("logged_in", true).is_err()
+        || session.insert("username", username).is_err()
+        || session.insert("is_admin", is_admin).is_err()
+        || session.insert("auth_token", &token).is_err()
+    {
         return HttpResponse::InternalServerError().json(json!({"error": "Session error"}));
     }
 
@@ -111,8 +188,75 @@ pub async fn login(
 
     HttpResponse::Ok().json(json!({
         "status": "success",
-        "username": req.username,
-        "is_admin": is_admin
+        "username": username,
+        "is_admin": is_admin,
+        "token": token
+    }))
+}
+
+#[post("/api/register")]
+pub async fn register(data: web::Data<AppState>, req: web::Json<RegisterRequest>) -> impl Responder {
+    let username = req.username.trim();
+    if !valid_username(username) {
+        return HttpResponse::BadRequest().json(json!({
+            "error": "Username must be 3-32 chars and use only letters, numbers, '-' or '_'"
+        }));
+    }
+
+    let public_key = req.pgp_public_key.trim();
+    if public_key.is_empty() {
+        return HttpResponse::BadRequest().json(json!({"error": "pgp_public_key is required"}));
+    }
+    if let Err(e) = crate::auth::pgp::validate_public_key(public_key) {
+        return HttpResponse::BadRequest().json(json!({"error": e}));
+    }
+
+    let user_key = format!("user:{username}");
+    match sqlx::query("SELECT 1 FROM jeebs_store WHERE key = ?")
+        .bind(&user_key)
+        .fetch_optional(&data.db)
+        .await
+    {
+        Ok(Some(_)) => {
+            return HttpResponse::Conflict().json(json!({"error": "Username already exists"}));
+        }
+        Ok(None) => {}
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(json!({"error": "Database error"}));
+        }
+    }
+
+    let email = req.email.as_deref().unwrap_or("").trim();
+    let user_json = json!({
+        "username": username,
+        "email": email,
+        "role": "user",
+        "auth_type": "pgp",
+        "pgp_public_key": public_key,
+        "created_at": Utc::now().to_rfc3339(),
+    });
+
+    let user_bytes = match serde_json::to_vec(&user_json) {
+        Ok(v) => v,
+        Err(_) => {
+            return HttpResponse::InternalServerError()
+                .json(json!({"error": "Failed to serialize user"}));
+        }
+    };
+
+    if sqlx::query("INSERT INTO jeebs_store (key, value) VALUES (?, ?)")
+        .bind(&user_key)
+        .bind(user_bytes)
+        .execute(&data.db)
+        .await
+        .is_err()
+    {
+        return HttpResponse::InternalServerError().json(json!({"error": "Failed to create user"}));
+    }
+
+    HttpResponse::Created().json(json!({
+        "status": "registered",
+        "username": username
     }))
 }
 
@@ -122,78 +266,68 @@ pub async fn login_pgp(
     req: web::Json<PgpLoginRequest>,
     session: Session,
 ) -> impl Responder {
-    // Verify PGP signature using the helper in src/auth/pgp.rs
-    let verified = match crate::auth::pgp::verify_signature(&req.signed_message) {
-        Ok(s) => s,
-        Err(e) => return HttpResponse::Unauthorized().json(json!({"error": format!("Signature verification failed: {}", e)})),
-    };
+    handle_pgp_login(&data, &req, &session).await
+}
 
-    // Expect format: LOGIN:username:timestamp
-    let parts: Vec<&str> = verified.trim().split(':').collect();
-    if parts.len() != 3 || parts[0] != "LOGIN" {
-        return HttpResponse::BadRequest().json(json!({"error": "Signed message has invalid format"}));
-    }
-    let username = parts[1];
-    if username != req.username {
-        return HttpResponse::BadRequest().json(json!({"error": "Signed username mismatch"}));
-    }
-
-    let ts = match parts[2].parse::<i64>() {
-        Ok(v) => v,
-        Err(_) => return HttpResponse::BadRequest().json(json!({"error": "Invalid timestamp in signed message"})),
-    };
-
-    let now = Utc::now().timestamp();
-    if (now - ts).abs() > 300 {
-        return HttpResponse::Unauthorized().json(json!({"error": "Signed message timestamp is outside allowed window"}));
-    }
-
-    // At this point the signature is valid and fresh. Grant session and admin if appropriate.
-    let uname = req.username.clone();
-    let _ = session.insert("username", uname.clone());
-
-    // Determine admin status: if username == "1090mb" or user role in jeebs_store == "admin"
-    let mut is_admin = false;
-    if uname == "1090mb" {
-        is_admin = true;
-    } else {
-        let user_key = format!("user:{}", uname);
-        if let Ok(Some(row)) = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
-            .bind(&user_key)
-            .fetch_optional(&data.db)
-            .await
-        {
-            let val: Vec<u8> = row.get(0);
-            if let Ok(user_json) = serde_json::from_slice::<serde_json::Value>(&val) {
-                if user_json.get("role").and_then(|v| v.as_str()) == Some("admin") {
-                    is_admin = true;
-                }
-            }
+#[post("/api/login")]
+pub async fn login(
+    data: web::Data<AppState>,
+    req: web::Json<LoginAliasRequest>,
+    session: Session,
+) -> impl Responder {
+    let signed_message = match req.signed_message.as_deref() {
+        Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+        _ => {
+            return HttpResponse::BadRequest().json(json!({
+                "error": "PGP login requires signed_message"
+            }));
         }
-    }
-
-    let _ = session.insert("is_admin", is_admin);
-
-    // Generate JWT token with user role
-    let now = Utc::now().timestamp();
-    let claims = TokenClaims {
-        username: uname.clone(),
-        is_admin,
-        iat: now,
-        exp: now + 86400 * 30, // 30 days
     };
 
-    let secret = "jeebs-secret-key-change-in-production"; // TODO: use env var
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret.as_ref()),
-    ).unwrap_or_default();
+    let pgp_req = PgpLoginRequest {
+        username: req.username.clone(),
+        signed_message,
+        remember_me: req.remember_me,
+    };
 
-    HttpResponse::Ok().json(json!({
-        "status": "success",
-        "user": uname,
-        "is_admin": is_admin,
-        "token": token
-    }))
+    handle_pgp_login(&data, &pgp_req, &session).await
+}
+
+#[get("/api/auth/status")]
+pub async fn auth_status(session: Session) -> impl Responder {
+    let logged_in = session
+        .get::<bool>("logged_in")
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+
+    if !logged_in {
+        return HttpResponse::Ok().json(AuthStatusResponse {
+            logged_in: false,
+            username: None,
+            is_admin: false,
+            token: None,
+        });
+    }
+
+    let username = session.get::<String>("username").ok().flatten();
+    let is_admin = session
+        .get::<bool>("is_admin")
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+    let token = session.get::<String>("auth_token").ok().flatten();
+
+    HttpResponse::Ok().json(AuthStatusResponse {
+        logged_in: true,
+        username,
+        is_admin,
+        token,
+    })
+}
+
+#[post("/api/logout")]
+pub async fn logout(session: Session) -> impl Responder {
+    session.purge();
+    HttpResponse::Ok().json(json!({"status": "logged_out"}))
 }

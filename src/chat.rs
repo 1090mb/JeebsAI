@@ -1,12 +1,16 @@
 use actix_session::Session;
 use actix_web::{post, web, HttpRequest, HttpResponse, Responder};
 use chrono::Local;
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::env;
 use std::io::Write;
 
 use crate::cortex::Cortex;
 use crate::state::AppState;
+
+const DEFAULT_JWT_SECRET: &str = "jeebs-secret-key-change-in-production";
 
 #[derive(Deserialize)]
 struct JeebsRequest {
@@ -18,6 +22,27 @@ struct JeebsResponse {
     response: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct TokenClaims {
+    username: String,
+    is_admin: bool,
+    iat: i64,
+    exp: i64,
+}
+
+fn extract_bearer_claims(http_req: &HttpRequest) -> Option<TokenClaims> {
+    let auth_header = http_req.headers().get("authorization")?.to_str().ok()?;
+    let token = auth_header.strip_prefix("Bearer ")?;
+    let secret = env::var("JWT_SECRET").unwrap_or_else(|_| DEFAULT_JWT_SECRET.to_string());
+    let decoded = decode::<TokenClaims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .ok()?;
+    Some(decoded.claims)
+}
+
 #[post("/api/jeebs")]
 pub async fn jeebs_api(
     data: web::Data<AppState>,
@@ -25,11 +50,22 @@ pub async fn jeebs_api(
     session: Session,
     http_req: HttpRequest,
 ) -> impl Responder {
-    let logged_in = session
+    let mut logged_in = session
         .get::<bool>("logged_in")
         .unwrap_or(Some(false))
         .unwrap_or(false);
-    let username = session.get::<String>("username").unwrap_or(None);
+    let mut username = session.get::<String>("username").unwrap_or(None);
+
+    if !logged_in || username.is_none() {
+        if let Some(claims) = extract_bearer_claims(&http_req) {
+            logged_in = true;
+            username = Some(claims.username.clone());
+            let _ = session.insert("logged_in", true);
+            let _ = session.insert("username", &claims.username);
+            let _ = session.insert("is_admin", claims.is_admin);
+        }
+    }
+
     if !logged_in {
         return HttpResponse::Unauthorized().json(json!({"error": "Not logged in"}));
     }
@@ -39,7 +75,7 @@ pub async fn jeebs_api(
         uid
     } else {
         let new_id = uuid::Uuid::new_v4().to_string();
-        session.insert("user_id", &new_id).unwrap();
+        let _ = session.insert("user_id", &new_id);
         new_id
     };
 

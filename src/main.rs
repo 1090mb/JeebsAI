@@ -1,4 +1,4 @@
-use jeebs::{auth, AppState};
+use jeebs::{auth, chat, AppState};
 use actix_web::{web, App, HttpServer};
 use actix_cors::Cors;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
@@ -56,9 +56,14 @@ async fn main() -> std::io::Result<()> {
             .wrap(Cors::permissive()) // This allows your phone to connect
             .wrap(SessionMiddleware::new(CookieSessionStore::default(), secret_key.clone()))
             .app_data(state.clone())
+            .service(auth::register)
             .service(auth::login)
             .service(auth::login_pgp)
+            .service(auth::auth_status)
+            .service(auth::logout)
+            .service(chat::jeebs_api)
             .service(Files::new("/webui", "./webui").index_file("index.html"))
+            .service(Files::new("/", "./webui").index_file("index.html"))
     })
     .bind(("127.0.0.1", port))?
     .run()
