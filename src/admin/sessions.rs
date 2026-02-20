@@ -15,12 +15,9 @@ pub struct UserSession {
 
 #[get("/api/admin/sessions")]
 pub async fn get_active_sessions(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let rows = sqlx::query(
@@ -49,12 +46,9 @@ pub async fn terminate_session(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
     let username = path.into_inner();
 

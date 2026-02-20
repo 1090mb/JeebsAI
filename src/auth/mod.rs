@@ -1,7 +1,7 @@
 use actix_session::Session;
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
 use chrono::Utc;
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
@@ -12,6 +12,7 @@ use crate::state::AppState;
 mod pgp;
 
 const DEFAULT_JWT_SECRET: &str = "jeebs-secret-key-change-in-production";
+pub const ROOT_ADMIN_USERNAME: &str = "1090mb";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TokenClaims {
@@ -61,6 +62,33 @@ fn valid_username(username: &str) -> bool {
         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
 }
 
+pub fn is_root_admin_session(session: &Session) -> bool {
+    let logged_in = session
+        .get::<bool>("logged_in")
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+    if !logged_in {
+        return false;
+    }
+
+    let is_admin = session
+        .get::<bool>("is_admin")
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+    if !is_admin {
+        return false;
+    }
+
+    session
+        .get::<String>("username")
+        .ok()
+        .flatten()
+        .map(|u| u == ROOT_ADMIN_USERNAME)
+        .unwrap_or(false)
+}
+
 fn issue_token(username: &str, is_admin: bool) -> Result<String, String> {
     let now = Utc::now().timestamp();
     let claims = TokenClaims {
@@ -77,6 +105,19 @@ fn issue_token(username: &str, is_admin: bool) -> Result<String, String> {
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .map_err(|e| format!("Failed to issue token: {e}"))
+}
+
+fn extract_bearer_claims(http_req: &HttpRequest) -> Option<TokenClaims> {
+    let auth_header = http_req.headers().get("authorization")?.to_str().ok()?;
+    let token = auth_header.strip_prefix("Bearer ")?;
+    let secret = env::var("JWT_SECRET").unwrap_or_else(|_| DEFAULT_JWT_SECRET.to_string());
+    let decoded = decode::<TokenClaims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .ok()?;
+    Some(decoded.claims)
 }
 
 async fn handle_pgp_login(
@@ -294,7 +335,7 @@ pub async fn login(
 }
 
 #[get("/api/auth/status")]
-pub async fn auth_status(session: Session) -> impl Responder {
+pub async fn auth_status(session: Session, http_req: HttpRequest) -> impl Responder {
     let logged_in = session
         .get::<bool>("logged_in")
         .ok()
@@ -302,6 +343,29 @@ pub async fn auth_status(session: Session) -> impl Responder {
         .unwrap_or(false);
 
     if !logged_in {
+        if let Some(claims) = extract_bearer_claims(&http_req) {
+            let bearer_token = http_req
+                .headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer "))
+                .map(|s| s.to_string());
+
+            let _ = session.insert("logged_in", true);
+            let _ = session.insert("username", &claims.username);
+            let _ = session.insert("is_admin", claims.is_admin);
+            if let Some(token) = &bearer_token {
+                let _ = session.insert("auth_token", token);
+            }
+
+            return HttpResponse::Ok().json(AuthStatusResponse {
+                logged_in: true,
+                username: Some(claims.username),
+                is_admin: claims.is_admin,
+                token: bearer_token,
+            });
+        }
+
         return HttpResponse::Ok().json(AuthStatusResponse {
             logged_in: false,
             username: None,

@@ -322,12 +322,45 @@
         </div>
 
         <script>
+            const ROOT_ADMIN_USERNAME = "1090mb";
+            const TOKEN_KEY = "jeebs_auth_token";
             const container = document.getElementById("log-container");
             let currentPage = 1;
             const limit = 50;
             let currentLogs = [];
             let ws = null;
             let isPaused = false;
+
+            function authHeaders() {
+                const token = localStorage.getItem(TOKEN_KEY);
+                return token ? { Authorization: `Bearer ${token}` } : {};
+            }
+
+            async function ensureRootAdminAccess() {
+                try {
+                    const res = await fetch("/api/auth/status", {
+                        credentials: "same-origin",
+                        headers: authHeaders(),
+                    });
+                    if (!res.ok) {
+                        window.location.replace("/webui/index.html");
+                        return false;
+                    }
+                    const auth = await res.json();
+                    const allowed =
+                        auth.logged_in === true &&
+                        auth.is_admin === true &&
+                        auth.username === ROOT_ADMIN_USERNAME;
+                    if (!allowed) {
+                        window.location.replace("/webui/index.html");
+                        return false;
+                    }
+                    return true;
+                } catch {
+                    window.location.replace("/webui/index.html");
+                    return false;
+                }
+            }
 
             // Theme Init
             if (localStorage.getItem("theme") === "light")
@@ -344,7 +377,13 @@
 
             async function fetchCategories() {
                 try {
-                    const res = await fetch("/api/admin/log_categories");
+                    const res = await fetch("/api/admin/log_categories", {
+                        credentials: "same-origin",
+                        headers: authHeaders(),
+                    });
+                    if (!res.ok) {
+                        return;
+                    }
                     if (res.ok) {
                         const cats = await res.json();
                         const select =
@@ -367,19 +406,24 @@
                     const search = document.getElementById("searchInput").value;
                     const start = document.getElementById("startDate").value;
                     const end = document.getElementById("endDate").value;
-                    let url = `/api/admin/logs?page=${currentPage}&limit=${limit}`;
-                    if (cat && cat !== "All")
-                        url += `?category=${encodeURIComponent(cat)}`;
-                    if (level && level !== "All")
-                        url += `&level=${encodeURIComponent(level)}`;
-                    if (cat && cat !== "All")
-                        url += `&category=${encodeURIComponent(cat)}`;
-                    if (search) url += `&search=${encodeURIComponent(search)}`;
-                    if (start)
-                        url += `&start_date=${encodeURIComponent(start)}`;
-                    if (end) url += `&end_date=${encodeURIComponent(end)}`;
 
-                    const res = await fetch(url);
+                    const params = new URLSearchParams({
+                        page: String(currentPage),
+                        limit: String(limit),
+                    });
+                    if (cat && cat !== "All") params.set("category", cat);
+                    if (level && level !== "All") params.set("level", level);
+                    if (search) params.set("search", search);
+                    if (start) params.set("start_date", start);
+                    if (end) params.set("end_date", end);
+
+                    const res = await fetch(
+                        `/api/admin/logs?${params.toString()}`,
+                        {
+                            credentials: "same-origin",
+                            headers: authHeaders(),
+                        },
+                    );
                     if (res.status === 401 || res.status === 403) {
                         container.innerHTML =
                             '<span class="error">Access Denied. Admin privileges required.</span>';
@@ -463,19 +507,16 @@
                 const search = document.getElementById("searchInput").value;
                 const start = document.getElementById("startDate").value;
                 const end = document.getElementById("endDate").value;
-                let url = "/api/admin/logs/export";
-                let params = [];
-                if (cat && cat !== "All") {
-                    params.push(`category=${encodeURIComponent(cat)}`);
-                }
-                if (level && level !== "All")
-                    params.push(`level=${encodeURIComponent(level)}`);
-                if (search) params.push(`search=${encodeURIComponent(search)}`);
-                if (start)
-                    params.push(`start_date=${encodeURIComponent(start)}`);
-                if (end) params.push(`end_date=${encodeURIComponent(end)}`);
-                if (params.length > 0) url += "?" + params.join("&");
-                window.location.href = url;
+                const params = new URLSearchParams();
+                if (cat && cat !== "All") params.set("category", cat);
+                if (level && level !== "All") params.set("level", level);
+                if (search) params.set("search", search);
+                if (start) params.set("start_date", start);
+                if (end) params.set("end_date", end);
+                const query = params.toString();
+                window.location.href = query
+                    ? `/api/admin/logs/export?${query}`
+                    : "/api/admin/logs/export";
             }
 
             function changePage(delta) {
@@ -492,7 +533,11 @@
                     )
                 )
                     return;
-                await fetch("/api/admin/logs", { method: "DELETE" });
+                await fetch("/api/admin/logs", {
+                    method: "DELETE",
+                    credentials: "same-origin",
+                    headers: authHeaders(),
+                });
                 currentPage = 1;
                 fetchLogs();
             }
@@ -604,8 +649,12 @@
                 fetchLogs();
             };
 
-            fetchCategories();
-            fetchLogs();
+            (async () => {
+                const allowed = await ensureRootAdminAccess();
+                if (!allowed) return;
+                fetchCategories();
+                fetchLogs();
+            })();
         </script>
     </body>
 </html>

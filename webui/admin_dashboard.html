@@ -224,6 +224,13 @@
                         Jeebs has learned.
                     </p>
                 </a>
+                <a href="/webui/logs.html" class="card">
+                    <h3>Advanced Logs</h3>
+                    <p>
+                        Open the full log viewer with filters, export, and
+                        stream controls.
+                    </p>
+                </a>
                 <a href="/webui/admin_blacklist.html" class="card">
                     <h3>IP Blacklist</h3>
                     <p>
@@ -269,51 +276,148 @@
         </div>
 
         <script>
-            async function loadStatus() {
+            const ROOT_ADMIN_USERNAME = "1090mb";
+            let rootAdminAuthorized = false;
+            const TOKEN_KEY = "jeebs_auth_token";
+function authHeaders(contentTypeJson = false) {
+    const headers = contentTypeJson ? { "Content-Type": "application/json" } : {};
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+}
+
+            async function ensureRootAdminAccess() {
                 try {
-                    const res = await fetch("/api/admin/status");
+                    const headers = {};
+                    const token = localStorage.getItem(TOKEN_KEY);
+                    if (token) {
+                        headers["Authorization"] = `Bearer ${token}`;
+                    }
+
+                    const res = await fetch("/api/auth/status", {
+                        credentials: "same-origin",
+                        headers,
+                    });
+                    if (!res.ok) {
+                        window.location.replace("/webui/index.html");
+                        return false;
+                    }
+
+                    const auth = await res.json();
+                    const allowed =
+                        auth.logged_in === true &&
+                        auth.is_admin === true &&
+                        auth.username === ROOT_ADMIN_USERNAME;
+
+                    if (!allowed) {
+                        window.location.replace("/webui/index.html");
+                        return false;
+                    }
+
+                    rootAdminAuthorized = true;
+                    return true;
+                } catch {
+                    window.location.replace("/webui/index.html");
+                    return false;
+                }
+            }
+
+            async function parseErrorMessage(res, fallback) {
+                try {
+                    const payload = await res.json();
+                    if (payload && payload.error) return payload.error;
+                } catch {}
+                try {
+                    const text = await res.text();
+                    if (text) return text;
+                } catch {}
+                return fallback;
+            }
+
+            function asFiniteNumber(value, fallback = 0) {
+                const number = Number(value);
+                return Number.isFinite(number) ? number : fallback;
+            }
+
+            async function loadStatus() {
+                if (!rootAdminAuthorized) return;
+                try {
+                    const res = await fetch("/api/admin/status", { headers: authHeaders() });
                     if (res.ok) {
                         const data = await res.json();
-                        const used = (data.used_memory / 1024 / 1024).toFixed(
-                            2,
-                        );
-                        const total = (data.total_memory / 1024 / 1024).toFixed(
-                            2,
-                        );
+                        const usedMb =
+                            data.used_memory_mb ??
+                            asFiniteNumber(data.used_memory, 0) / 1024 / 1024;
+                        const totalMb =
+                            data.total_memory_mb ??
+                            asFiniteNumber(data.total_memory, 0) / 1024 / 1024;
+                        const availableMb =
+                            data.available_memory_mb ??
+                            asFiniteNumber(data.available_memory, 0) /
+                                1024 /
+                                1024;
+                        const usedPercent =
+                            data.used_percent ??
+                            (totalMb > 0 ? (usedMb / totalMb) * 100 : 0);
+
                         document.getElementById("statusContent").innerHTML = `
-                        <strong>Uptime:</strong> ${data.uptime_formatted} &nbsp;|&nbsp;
-                        <strong>Memory:</strong> ${used} MB / ${total} MB
+                        <strong>Uptime:</strong> ${data.uptime_formatted || "unknown"} &nbsp;|&nbsp;
+                        <strong>Memory:</strong> ${usedMb.toFixed(2)} MB / ${totalMb.toFixed(2)} MB (${usedPercent.toFixed(1)}%) &nbsp;|&nbsp;
+                        <strong>Available:</strong> ${availableMb.toFixed(2)} MB
                     `;
                     } else {
+                        const message = await parseErrorMessage(
+                            res,
+                            "Failed to load status.",
+                        );
                         document.getElementById("statusContent").innerText =
-                            "Failed to load status.";
+                            `Failed to load status: ${message}`;
                     }
                 } catch {
                     document.getElementById("statusContent").innerText =
                         "Error loading status.";
                 }
             }
-            loadStatus();
 
             async function loadLogs() {
+                if (!rootAdminAuthorized) return;
                 try {
-                    const res = await fetch("/api/admin/logs");
+                    const res = await fetch("/api/admin/logs", { headers: authHeaders() });
                     if (res.ok) {
                         const logs = await res.json();
                         const container =
                             document.getElementById("logsContent");
                         container.innerHTML = logs
-                            .map((l) => `<div>${l}</div>`)
+                            .map((l) => {
+                                if (typeof l === "string") {
+                                    return `<div>${l}</div>`;
+                                }
+                                const ts = l.timestamp || "";
+                                const cat = l.category || "LOG";
+                                const lvl = l.level || "INFO";
+                                const msg = l.message || JSON.stringify(l);
+                                return `<div>[${ts}] ${cat}/${lvl}: ${msg}</div>`;
+                            })
                             .join("");
                         container.scrollTop = container.scrollHeight;
+                    } else {
+                        const message = await parseErrorMessage(
+                            res,
+                            "Failed to load logs.",
+                        );
+                        document.getElementById("logsContent").innerText =
+                            message;
                     }
-                } catch {}
+                } catch {
+                    document.getElementById("logsContent").innerText =
+                        "Error loading logs.";
+                }
             }
-            loadLogs();
 
             async function loadSessions() {
+                if (!rootAdminAuthorized) return;
                 try {
-                    const res = await fetch("/api/admin/sessions");
+                    const res = await fetch("/api/admin/sessions", { headers: authHeaders() });
                     if (res.ok) {
                         const sessions = await res.json();
                         const container =
@@ -333,30 +437,40 @@
                                   )
                                   .join("")
                             : "No active sessions.";
+                    } else {
+                        const message = await parseErrorMessage(
+                            res,
+                            "Failed to load sessions.",
+                        );
+                        document.getElementById("sessionsContent").innerText =
+                            message;
                     }
-                } catch {}
+                } catch {
+                    document.getElementById("sessionsContent").innerText =
+                        "Error loading sessions.";
+                }
             }
-            loadSessions();
-
-            setInterval(() => {
-                loadStatus();
-                loadLogs();
-                loadSessions();
-            }, 3000);
 
             async function terminateSession(username) {
+                if (!rootAdminAuthorized) return;
                 if (!confirm("Terminate session for " + username + "?")) return;
                 const res = await fetch("/api/admin/session/" + username, {
+                    headers: authHeaders(),
                     method: "DELETE",
                 });
                 if (res.ok) {
                     loadSessions();
                 } else {
-                    alert("Failed to terminate session");
+                    const message = await parseErrorMessage(
+                        res,
+                        "Failed to terminate session",
+                    );
+                    alert(message);
                 }
             }
 
             async function importDatabase(input) {
+                if (!rootAdminAuthorized) return;
                 if (!input.files || !input.files[0]) return;
                 const file = input.files[0];
                 if (
@@ -373,6 +487,7 @@
                     try {
                         const json = JSON.parse(e.target.result);
                         const res = await fetch("/api/admin/import", {
+                        headers: authHeaders(true),
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify(json),
@@ -380,11 +495,11 @@
                         if (res.ok) {
                             alert("Database imported successfully!");
                         } else {
-                            const data = await res.json();
-                            alert(
-                                "Import failed: " +
-                                    (data.error || "Unknown error"),
+                            const message = await parseErrorMessage(
+                                res,
+                                "Unknown error",
                             );
+                            alert("Import failed: " + message);
                         }
                     } catch (err) {
                         alert("Invalid JSON file or upload error: " + err);
@@ -395,27 +510,79 @@
             }
 
             async function startCrawl() {
+                if (!rootAdminAuthorized) return;
+                const statusEl = document.getElementById("crawlStatus");
                 const url = document.getElementById("crawlUrl").value.trim();
-                const depth = parseInt(
+                const depthRaw = parseInt(
                     document.getElementById("crawlDepth").value,
+                    10,
                 );
-                if (!url) return;
+                const depth = Number.isFinite(depthRaw)
+                    ? Math.min(3, Math.max(1, depthRaw))
+                    : 1;
 
-                document.getElementById("crawlStatus").innerText =
-                    "Unleashing Jeebs...";
+                if (!url) {
+                    statusEl.innerText = "Enter a URL to crawl.";
+                    return;
+                }
 
-                const res = await fetch("/api/admin/crawl", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ url, depth }),
-                });
+                statusEl.innerText = "Crawling and learning...";
 
-                const data = await res.json();
-                document.getElementById("crawlStatus").innerText =
-                    data.message ||
-                    (data.error ? "Error: " + data.error : "Failed");
-                if (data.ok) document.getElementById("crawlUrl").value = "";
+                try {
+                    const res = await fetch("/api/admin/crawl", {
+                        method: "POST",
+                        headers: authHeaders(true),
+                        body: JSON.stringify({ url, depth }),
+                    });
+
+                    const text = await res.text();
+                    let data = {};
+                    if (text) {
+                        try {
+                            data = JSON.parse(text);
+                        } catch {
+                            data = { error: text };
+                        }
+                    }
+
+                    if (!res.ok) {
+                        const err =
+                            data.error || data.message || `HTTP ${res.status}`;
+                        statusEl.innerText = `Error: ${err}`;
+                        return;
+                    }
+
+                    const visited = data.pages_visited ?? 0;
+                    const stored = data.pages_stored ?? 0;
+                    const links = data.links_followed ?? 0;
+                    statusEl.innerText =
+                        data.message ||
+                        `Crawl complete. Visited ${visited} page(s), stored ${stored} node(s), discovered ${links} link(s).`;
+
+                    if (data.ok) {
+                        document.getElementById("crawlUrl").value = "";
+                    }
+                } catch (error) {
+                    statusEl.innerText = `Crawler request failed: ${error}`;
+                }
             }
+
+            async function bootstrapDashboard() {
+                const allowed = await ensureRootAdminAccess();
+                if (!allowed) return;
+
+                loadStatus();
+                loadLogs();
+                loadSessions();
+
+                setInterval(() => {
+                    loadStatus();
+                    loadLogs();
+                    loadSessions();
+                }, 5000);
+            }
+
+            bootstrapDashboard();
         </script>
     </body>
 </html>

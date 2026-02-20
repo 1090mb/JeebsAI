@@ -12,12 +12,9 @@ pub struct IpRequest {
 
 #[get("/api/admin/blacklist")]
 pub async fn get_blacklist(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let blacklist = data.ip_blacklist.read().unwrap();
@@ -31,12 +28,9 @@ pub async fn add_blacklist_ip(
     req: web::Json<IpRequest>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let ip = req.ip.trim().to_string();
@@ -56,12 +50,9 @@ pub async fn remove_blacklist_ip(
     req: web::Json<IpRequest>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let ip = req.ip.trim().to_string();

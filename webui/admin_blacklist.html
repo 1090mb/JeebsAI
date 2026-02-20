@@ -1,90 +1,200 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeebs Admin - IP Blacklist</title>
-    <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background: #f4f4f4; }
-        h1 { color: #333; }
-        .input-group { margin-bottom: 2rem; display: flex; gap: 10px; }
-        input { flex-grow: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 20px; font-size: 16px; background: #d9534f; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button.add { background: #0275d8; }
-        button:hover { opacity: 0.9; }
-        ul { list-style: none; padding: 0; }
-        li { background: white; padding: 1rem; margin-bottom: 0.5rem; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .error { color: red; margin-bottom: 1rem; }
-    </style>
-</head>
-<body>
-    <h1>IP Blacklist Management</h1>
-    
-    <div class="input-group">
-        <input type="text" id="ipInput" placeholder="Enter IP address (e.g., 192.168.1.1)">
-        <button class="add" onclick="addIp()">Block IP</button>
-    </div>
-    <div id="error" class="error"></div>
-
-    <ul id="ipList"></ul>
-
-    <script>
-        async function loadBlacklist() {
-            const res = await fetch('/api/admin/blacklist');
-            if (res.status === 401) {
-                document.body.innerHTML = '<h1>Unauthorized</h1><p>You must be logged in as admin.</p>';
-                return;
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Jeebs Admin - IP Blacklist</title>
+        <style>
+            body {
+                font-family: sans-serif;
+                max-width: 800px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+                background: #f4f4f4;
             }
-            const ips = await res.json();
-            const list = document.getElementById('ipList');
-            list.innerHTML = '';
-            ips.forEach(ip => {
-                const li = document.createElement('li');
-                li.innerHTML = `
+            h1 {
+                color: #333;
+            }
+            .input-group {
+                margin-bottom: 2rem;
+                display: flex;
+                gap: 10px;
+            }
+            input {
+                flex-grow: 1;
+                padding: 10px;
+                font-size: 16px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                background: #d9534f;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            button.add {
+                background: #0275d8;
+            }
+            button:hover {
+                opacity: 0.9;
+            }
+            ul {
+                list-style: none;
+                padding: 0;
+            }
+            li {
+                background: white;
+                padding: 1rem;
+                margin-bottom: 0.5rem;
+                border-radius: 4px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            }
+            .error {
+                color: red;
+                margin-bottom: 1rem;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>IP Blacklist Management</h1>
+
+        <div class="input-group">
+            <input
+                type="text"
+                id="ipInput"
+                placeholder="Enter IP address (e.g., 192.168.1.1)"
+            />
+            <button class="add" onclick="addIp()">Block IP</button>
+        </div>
+        <div id="error" class="error"></div>
+
+        <ul id="ipList"></ul>
+
+        <script>
+            const ROOT_ADMIN_USERNAME = "1090mb";
+
+            async function ensureRootAdminAccess() {
+                try {
+                    const token = localStorage.getItem("jeebs_auth_token");
+                    const headers = token
+                        ? { Authorization: `Bearer ${token}` }
+                        : {};
+                    const res = await fetch("/api/auth/status", {
+                        credentials: "same-origin",
+                        headers,
+                    });
+                    if (!res.ok) {
+                        window.location.replace("/webui/index.html");
+                        return false;
+                    }
+                    const auth = await res.json();
+                    const allowed =
+                        auth.logged_in === true &&
+                        auth.is_admin === true &&
+                        auth.username === ROOT_ADMIN_USERNAME;
+                    if (!allowed) {
+                        window.location.replace("/webui/index.html");
+                        return false;
+                    }
+                    return true;
+                } catch {
+                    window.location.replace("/webui/index.html");
+                    return false;
+                }
+            }
+
+            async function parseErrorMessage(res, fallback) {
+                try {
+                    const data = await res.json();
+                    if (data && data.error) return data.error;
+                } catch {}
+                try {
+                    const text = await res.text();
+                    if (text) return text;
+                } catch {}
+                return fallback;
+            }
+
+            async function loadBlacklist() {
+                const res = await fetch("/api/admin/blacklist");
+                if (!res.ok) {
+                    const message = await parseErrorMessage(
+                        res,
+                        "Failed to load blacklist",
+                    );
+                    document.getElementById("error").innerText = message;
+                    return;
+                }
+                const ips = await res.json();
+                const list = document.getElementById("ipList");
+                list.innerHTML = "";
+                ips.forEach((ip) => {
+                    const li = document.createElement("li");
+                    li.innerHTML = `
                     <span>${ip}</span>
                     <button onclick="removeIp('${ip}')">Unblock</button>
                 `;
-                list.appendChild(li);
-            });
-        }
-
-        async function addIp() {
-            const input = document.getElementById('ipInput');
-            const ip = input.value.trim();
-            if (!ip) return;
-
-            const res = await fetch('/api/admin/blacklist', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip })
-            });
-
-            if (res.ok) {
-                input.value = '';
-                loadBlacklist();
-            } else {
-                const data = await res.json();
-                document.getElementById('error').innerText = data.error || 'Failed to add IP';
+                    list.appendChild(li);
+                });
             }
-        }
 
-        async function removeIp(ip) {
-            if (!confirm(`Are you sure you want to unblock ${ip}?`)) return;
+            async function addIp() {
+                const input = document.getElementById("ipInput");
+                const ip = input.value.trim();
+                if (!ip) return;
 
-            const res = await fetch('/api/admin/blacklist', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip })
-            });
+                const res = await fetch("/api/admin/blacklist", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ip }),
+                });
 
-            if (res.ok) {
-                loadBlacklist();
-            } else {
-                alert('Failed to remove IP');
+                if (res.ok) {
+                    input.value = "";
+                    document.getElementById("error").innerText = "";
+                    loadBlacklist();
+                } else {
+                    const message = await parseErrorMessage(
+                        res,
+                        "Failed to add IP",
+                    );
+                    document.getElementById("error").innerText = message;
+                }
             }
-        }
 
-        loadBlacklist();
-    </script>
-</body>
+            async function removeIp(ip) {
+                if (!confirm(`Are you sure you want to unblock ${ip}?`)) return;
+
+                const res = await fetch("/api/admin/blacklist", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ip }),
+                });
+
+                if (res.ok) {
+                    document.getElementById("error").innerText = "";
+                    loadBlacklist();
+                } else {
+                    const message = await parseErrorMessage(
+                        res,
+                        "Failed to remove IP",
+                    );
+                    alert(message);
+                }
+            }
+
+            (async () => {
+                const allowed = await ensureRootAdminAccess();
+                if (!allowed) return;
+                loadBlacklist();
+            })();
+        </script>
+    </body>
 </html>

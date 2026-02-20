@@ -488,6 +488,7 @@
 
         <script>
             const TOKEN_KEY = "jeebs_auth_token";
+            const ROOT_ADMIN_USERNAME = "1090mb";
 
             const state = {
                 loggedIn: false,
@@ -506,6 +507,13 @@
             const promptInput = document.getElementById("promptInput");
             const adminControlsLink =
                 document.getElementById("adminControlsLink");
+
+            function isRootAdminSession() {
+                return (
+                    Boolean(state.isAdmin) &&
+                    String(state.username) === ROOT_ADMIN_USERNAME
+                );
+            }
 
             function setStatus(message, level = "info") {
                 statusBar.textContent = message || "";
@@ -563,7 +571,7 @@
                 tokenBox.textContent = state.token
                     ? `Token: ${state.token}`
                     : "Token missing from session response.";
-                adminControlsLink.style.display = state.isAdmin
+                adminControlsLink.style.display = isRootAdminSession()
                     ? "inline-flex"
                     : "none";
                 promptInput.focus();

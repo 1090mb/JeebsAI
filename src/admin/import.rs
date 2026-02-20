@@ -19,12 +19,9 @@ pub async fn import_database(
     req: web::Json<ImportRequest>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let db = &data.db;

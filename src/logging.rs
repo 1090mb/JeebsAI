@@ -131,12 +131,9 @@ pub async fn get_logs(
     query: web::Query<LogQuery>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let page = query.page.unwrap_or(1).max(1);
@@ -221,12 +218,9 @@ pub async fn get_logs(
 
 #[delete("/api/admin/logs")]
 pub async fn clear_logs(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     match sqlx::query("DELETE FROM system_logs")
@@ -254,12 +248,9 @@ pub async fn export_logs(
     query: web::Query<LogQuery>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let search_term = query.search.as_deref().unwrap_or("");
@@ -355,12 +346,9 @@ pub async fn export_logs(
 
 #[get("/api/admin/log_categories")]
 pub async fn get_categories(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(serde_json::json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(serde_json::json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let rows = sqlx::query("SELECT DISTINCT category FROM system_logs ORDER BY category ASC")
@@ -441,12 +429,8 @@ pub async fn ws_index(
     stream: web::Payload,
     session: Session,
 ) -> Result<HttpResponse, actix_web::Error> {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return Ok(HttpResponse::Unauthorized().finish());
+    if !crate::auth::is_root_admin_session(&session) {
+        return Ok(HttpResponse::Forbidden().finish());
     }
     ws::start(LogWs, &req, stream)
 }

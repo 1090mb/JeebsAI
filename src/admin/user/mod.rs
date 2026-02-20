@@ -15,12 +15,9 @@ pub struct UserInfo {
 
 #[get("/api/admin/users")]
 pub async fn admin_list_users(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let rows = sqlx::query("SELECT key, value FROM jeebs_store WHERE key LIKE 'user:%'")
@@ -54,12 +51,9 @@ pub async fn admin_delete_user(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
     let username = path.into_inner();
     if username == "admin" {
@@ -87,12 +81,9 @@ pub async fn admin_reset_user_password(
     req: web::Json<ResetPasswordRequest>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     let user_key = format!("user:{}", req.username);
@@ -132,12 +123,9 @@ pub async fn admin_update_user_role(
     req: web::Json<UpdateRoleRequest>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
-    if !is_admin {
-        return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
+    if !crate::auth::is_root_admin_session(&session) {
+        return HttpResponse::Forbidden()
+            .json(json!({"error": "Restricted to 1090mb admin account"}));
     }
 
     if req.username == "admin" {
