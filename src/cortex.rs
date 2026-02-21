@@ -1605,821 +1605,137 @@ async fn store_external_learning_doc(
     Ok(node_id)
 }
 
-async fn run_training_cycle(state: &AppState) -> TrainingCycleReport {
-    let cycle_started_at = Local::now().to_rfc3339();
-    let cycle_timer = Instant::now();
-    let min_duration = Duration::from_secs(60);  // 1 minute minimum
-    let max_duration = Duration::from_secs(300); // 5 minutes maximum
-
-    let mut report = TrainingCycleReport {
-        cycle_started_at: cycle_started_at.clone(),
-        cycle_finished_at: cycle_started_at.clone(),
-        duration_ms: 0,
-        topics: Vec::new(),
-        nodes_written: 0,
-        errors: Vec::new(),
-        websites_scraped: Vec::new(),
-        learned_items: Vec::new(),
-        crawl_pages_visited: 0,
-        crawl_pages_stored: 0,
-        crawl_links_followed: 0,
-        crawl_nodes_written: 0,
-        wikipedia_docs_written: 0,
-        text_chars_learned: 0,
-    };
-
-    let cycle_started_for_state = cycle_started_at.clone();
-    mutate_training_state(&state.db, move |mode| {
-        mode.is_cycle_running = true;
-        mode.active_cycle_started_at = Some(cycle_started_for_state);
-        mode.active_phase = "starting training cycle".to_string();
-        mode.active_target = None;
-        mode.active_nodes_written = 0;
-        mode.active_websites_completed = 0;
-        mode.active_topics_completed = 0;
-        mode.active_updated_at = Some(Local::now().to_rfc3339());
-    })
-    .await;
-
-    if !*state.internet_enabled.read().unwrap() {
-        report
-            .errors
-            .push("internet is disabled; enable it in admin first".to_string());
-        finalize_training_report(&mut report, &cycle_timer);
-        return report;
-    }
-
-    let mut topics = collect_training_topics(&state.db, 4).await;
-    for curiosity_topic in jeebs_curiosity_topics() {
-        if topics.len() >= 7 {
-            break;
-        }
-        if !topics.contains(&curiosity_topic) {
-            topics.push(curiosity_topic);
-        }
-    }
-    report.topics = topics.clone();
-
-    let topics_count = report.topics.len() as u64;
-    mutate_training_state(&state.db, move |mode| {
-        mode.active_phase = "collecting topics and preparing sources".to_string();
-        mode.active_target = Some(format!("{topics_count} topic(s) queued"));
-        mode.active_updated_at = Some(Local::now().to_rfc3339());
-    })
-    .await;
-
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent("JeebsAI-TrainingMode/1.0")
-        .build()
-    {
-        Ok(client) => client,
-        Err(err) => {
-            report
-                .errors
-                .push(format!("failed to initialize training client: {err}"));
-            finalize_training_report(&mut report, &cycle_timer);
-            return report;
-        }
-    };
-
-    let crawl_depth = env::var("TRAINING_MODE_CRAWL_DEPTH")
-        .ok()
-        .and_then(|raw| raw.parse::<u8>().ok())
-        .map(|value| value.clamp(1, 3))
-        .unwrap_or(1);
-    let random_site_count = env::var("TRAINING_MODE_RANDOM_SITES_PER_CYCLE")
-        .ok()
-        .and_then(|raw| raw.parse::<usize>().ok())
-        .map(|value| value.clamp(1, 5))
-        .unwrap_or(2);
-
-    let random_sites = {
-        let mut rng = rand::thread_rng();
-        let mut sites = random_crawl_candidates();
-        sites.shuffle(&mut rng);
-        sites
-            .into_iter()
-            .take(random_site_count)
-            .collect::<Vec<_>>()
-    };
-
-    let mut websites_completed = 0_u64;
-    let mut topics_completed = 0_u64;
-
-    // CRAWL RANDOM WEBSITES FIRST
-    for site in random_sites {
-        // Check maximum duration
-        if cycle_timer.elapsed() >= max_duration {
-            mutate_training_state(&state.db, move |mode| {
-                mode.active_phase = "maximum duration reached, stopping".to_string();
-                mode.active_updated_at = Some(Local::now().to_rfc3339());
-            })
-            .await;
-            break;
-        }
-
-        let target_site = site.to_string();
-        mutate_training_state(&state.db, move |mode| {
-            mode.active_phase = "crawling random website".to_string();
-            mode.active_target = Some(target_site);
-            mode.active_updated_at = Some(Local::now().to_rfc3339());
-        })
-        .await;
-
-        match crawl_and_store(state, site, crawl_depth).await {
-            Ok(summary) => {
-                websites_completed = websites_completed.saturating_add(1);
-                report.websites_scraped.push(summary.start_url.clone());
-                report.nodes_written += summary.pages_stored;
-                report.crawl_pages_visited += summary.pages_visited;
-                report.crawl_pages_stored += summary.pages_stored;
-                report.crawl_links_followed += summary.links_followed;
-                report.crawl_nodes_written += summary.pages_stored;
-                for node in summary.stored_nodes.into_iter().take(8) {
-                    report.learned_items.push(TrainingLearnedItem {
-                        node_id: node.node_id,
-                        title: node.label,
-                        summary: node.summary,
-                        source_url: node.source_url,
-                        topic: "random_web_crawl".to_string(),
-                        source_type: "crawl".to_string(),
-                    });
-                }
-            }
-            Err(err) => report.errors.push(format!("random site '{site}': {err}")),
-        }
-
-        let active_nodes_written = report.nodes_written as u64;
-        mutate_training_state(&state.db, move |mode| {
-            mode.active_nodes_written = active_nodes_written;
-            mode.active_websites_completed = websites_completed;
-            mode.active_topics_completed = topics_completed;
-            mode.active_updated_at = Some(Local::now().to_rfc3339());
-        })
-        .await;
-    }
-
-    // RESEARCH TOPICS - continue if under minimum, stop if over maximum
-    for topic in topics {
-        // Check maximum duration
-        if cycle_timer.elapsed() >= max_duration {
-            mutate_training_state(&state.db, move |mode| {
-                mode.active_phase = "maximum duration reached, stopping".to_string();
-                mode.active_updated_at = Some(Local::now().to_rfc3339());
-            })
-            .await;
-            break;
-        }
-
-        let target_topic = topic.clone();
-        mutate_training_state(&state.db, move |mode| {
-            mode.active_phase = "researching topic".to_string();
-            mode.active_target = Some(target_topic);
-            mode.active_updated_at = Some(Local::now().to_rfc3339());
-        })
-        .await;
-
-        match query_wikipedia_docs(&client, &topic, 2).await {
-            Ok(docs) => {
-                for doc in docs {
-                    match store_external_learning_doc(&state.db, &doc).await {
-                        Ok(node_id) => {
-                            report.nodes_written += 1;
-                            report.learned_items.push(TrainingLearnedItem {
-                                node_id,
-                                title: doc.title.clone(),
-                                summary: doc.summary.clone(),
-                                source_url: doc.url.clone(),
-                                topic: doc.topic.clone(),
-                                source_type: "wikipedia".to_string(),
-                            });
-                            report.wikipedia_docs_written += 1;
-                        }
-                        Err(err) => report.errors.push(format!(
-                            "failed to store learned doc '{}': {err}",
-                            doc.title
-                        )),
-                    }
-
-                    let active_nodes_written = report.nodes_written as u64;
-                    let active_docs_written = report.wikipedia_docs_written as u64;
-                    mutate_training_state(&state.db, move |mode| {
-                        mode.active_nodes_written = active_nodes_written;
-                        mode.active_target = Some(format!(
-                            "writing wikipedia docs ({active_docs_written} this cycle)"
-                        ));
-                        mode.active_updated_at = Some(Local::now().to_rfc3339());
-                    })
-                    .await;
-                }
-            }
-            Err(err) => report.errors.push(format!("topic '{topic}': {err}")),
-        }
-
-        topics_completed = topics_completed.saturating_add(1);
-        let active_nodes_written = report.nodes_written as u64;
-        mutate_training_state(&state.db, move |mode| {
-            mode.active_nodes_written = active_nodes_written;
-            mode.active_websites_completed = websites_completed;
-            mode.active_topics_completed = topics_completed;
-            mode.active_updated_at = Some(Local::now().to_rfc3339());
-        })
-        .await;
-    }
-
-    // ENFORCE MINIMUM DURATION - if we finished too quickly, continue exploring
-    while cycle_timer.elapsed() < min_duration && report.errors.is_empty() {
-        // Check if we should continue
-        if cycle_timer.elapsed() >= max_duration {
-            break;
-        }
-
-        // Keep exploring - pick a random topic and crawl again
-        mutate_training_state(&state.db, move |mode| {
-            mode.active_phase = "continuing exploration (minimum duration)".to_string();
-            mode.active_updated_at = Some(Local::now().to_rfc3339());
-        })
-        .await;
-
-        // Pick a random site to continue exploring
-        let mut rng = rand::thread_rng();
-        let sites = random_crawl_candidates();
-        if !sites.is_empty() {
-            let idx = rng.gen_range(0..sites.len());
-            let site = sites[idx];
-
-            let target_site = site.to_string();
-            mutate_training_state(&state.db, move |mode| {
-                mode.active_phase = "exploring additional domain (minimum duration)".to_string();
-                mode.active_target = Some(target_site);
-                mode.active_updated_at = Some(Local::now().to_rfc3339());
-            })
-            .await;
-
-            let crawl_depth = 1; // Use depth 1 for additional explorations
-            match crawl_and_store(state, site, crawl_depth).await {
-                Ok(summary) => {
-                    websites_completed = websites_completed.saturating_add(1);
-                    if !report.websites_scraped.contains(&summary.start_url) {
-                        report.websites_scraped.push(summary.start_url.clone());
-                    }
-                    report.nodes_written += summary.pages_stored;
-                    report.crawl_pages_visited += summary.pages_visited;
-                    report.crawl_pages_stored += summary.pages_stored;
-                    report.crawl_links_followed += summary.links_followed;
-                    report.crawl_nodes_written += summary.pages_stored;
-                    for node in summary.stored_nodes.into_iter().take(4) {
-                        if report.learned_items.len() < 32 {
-                            report.learned_items.push(TrainingLearnedItem {
-                                node_id: node.node_id,
-                                title: node.label,
-                                summary: node.summary,
-                                source_url: node.source_url,
-                                topic: "extended_exploration".to_string(),
-                                source_type: "crawl".to_string(),
-                            });
-                        }
-                    }
-                }
-                Err(_) => {
-                    // Continue trying other sources
-                }
-            }
-
-            let active_nodes_written = report.nodes_written as u64;
-            mutate_training_state(&state.db, move |mode| {
-                mode.active_nodes_written = active_nodes_written;
-                mode.active_websites_completed = websites_completed;
-                mode.active_updated_at = Some(Local::now().to_rfc3339());
-            })
-            .await;
-
-            // Small delay to avoid hammering
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        } else {
-            break;
-        }
-    }
-
-    if report.learned_items.len() > 24 {
-        report.learned_items.truncate(24);
-    }
-
-    finalize_training_report(&mut report, &cycle_timer);
-    report
-}
-
-pub fn spawn_autonomous_training(state: web::Data<AppState>) {
-    tokio::spawn(async move {
-        crate::logging::log(
-            &state.db,
-            "INFO",
-            "training_mode",
-            "Autonomous training worker started.",
-        )
-        .await;
-
-        loop {
-            let mut mode = load_training_state(&state.db).await;
-            if mode.enabled {
-                let report = run_training_cycle(state.get_ref()).await;
-                apply_training_report(&mut mode, &report, "autonomous_worker");
-                let _ = save_training_state(&state.db, &mode).await;
-
-                crate::logging::log(
-                    &state.db,
-                    "INFO",
-                    "training_mode",
-                    &format!(
-                        "Training cycle complete. duration_ms={} topics={} websites={} nodes_written={} crawl_pages_visited={} crawl_links_followed={} wiki_docs={} errors={}",
-                        report.duration_ms,
-                        report.topics.len(),
-                        report.websites_scraped.len(),
-                        report.nodes_written,
-                        report.crawl_pages_visited,
-                        report.crawl_links_followed,
-                        report.wikipedia_docs_written,
-                        report.errors.len()
-                    ),
-                )
-                .await;
-            }
-
-            tokio::time::sleep(Duration::from_secs(training_interval_seconds())).await;
-        }
-    });
-}
-
-pub async fn search_knowledge(db: &SqlitePool, query: &str) -> Vec<BrainNode> {
-    let pattern = format!("%{}%", query);
-    let rows = sqlx::query(
-        "SELECT id, COALESCE(label, id) AS label, COALESCE(summary, '') AS summary, COALESCE(created_at, '') AS created_at
-         FROM brain_nodes
-         WHERE id LIKE ? OR label LIKE ? OR summary LIKE ?
-         ORDER BY created_at DESC
-         LIMIT 10",
-    )
-    .bind(&pattern)
-    .bind(&pattern)
-    .bind(&pattern)
-    .fetch_all(db)
-    .await
-    .unwrap_or_default();
-
-    rows.into_iter()
-        .map(|row| {
-            let raw_id: String = row.get(0);
-            let label: String = row.get(1);
-            let summary: String = row.get(2);
-            let created_at: String = row.get(3);
-            BrainNode {
-                id: raw_id.parse::<i64>().ok(),
-                key: raw_id.clone(),
-                value: summary.clone(),
-                label,
-                summary,
-                created_at,
-            }
-        })
-        .collect()
-}
-
-async fn check_dejavu(prompt: &str, db: &SqlitePool) -> Option<String> {
-    fn parse_answer_bytes(bytes: &[u8]) -> Option<String> {
-        if let Ok(json_value) = serde_json::from_slice::<serde_json::Value>(bytes) {
-            if let Some(answer) = json_value.get("answer").and_then(|v| v.as_str()) {
-                let answer = answer.trim();
-                if !answer.is_empty() {
-                    return Some(answer.to_string());
-                }
-            }
-            if let Some(answer) = json_value.get("response").and_then(|v| v.as_str()) {
-                let answer = answer.trim();
-                if !answer.is_empty() {
-                    return Some(answer.to_string());
-                }
-            }
-        }
-
-        if let Ok(text) = std::str::from_utf8(bytes) {
-            let text = text.trim();
-            if !text.is_empty() {
-                return Some(text.to_string());
-            }
-        }
-
-        None
-    }
-
-    let key = format!("chat:faq:{}", canonical_prompt_key(prompt));
-    match sqlx::query("SELECT value FROM jeebs_store WHERE key = ? LIMIT 1")
-        .bind(&key)
-        .fetch_optional(db)
-        .await
-    {
-        Ok(Some(row)) => {
-            let value: Vec<u8> = row.get(0);
-            if let Some(answer) = parse_answer_bytes(&value) {
-                return Some(answer);
-            }
-
-            if let Ok(decoded) = decode_all(&value) {
-                return parse_answer_bytes(&decoded);
-            }
-
-            None
-        }
-        _ => None,
-    }
-}
-
-async fn search_brain_for_chat(db: &SqlitePool, query: &str) -> Vec<(String, String)> {
-    let pattern = format!("%{}%", query);
-    let rows = sqlx::query(
-        "SELECT COALESCE(label, id) AS label, COALESCE(summary, '') AS summary
-         FROM brain_nodes
-         WHERE id LIKE ? OR label LIKE ? OR summary LIKE ?
-         ORDER BY created_at DESC
-         LIMIT 3",
-    )
-    .bind(&pattern)
-    .bind(&pattern)
-    .bind(&pattern)
-    .fetch_all(db)
-    .await
-    .unwrap_or_default();
-
-    rows.into_iter()
-        .map(|row| {
-            let label: String = row.get(0);
-            let summary: String = row.get(1);
-            (label, summary)
-        })
-        .collect()
-}
-
-fn looks_like_math_expression(expr: &str) -> bool {
-    let compact = expr.trim();
-    if compact.is_empty() {
-        return false;
-    }
-
-    let mut has_digit = false;
-    for ch in compact.chars() {
-        if ch.is_ascii_digit() {
-            has_digit = true;
-            continue;
-        }
-        if matches!(
-            ch,
-            ' ' | '+' | '-' | '*' | '/' | '(' | ')' | '.' | '^' | '%'
-        ) {
-            continue;
-        }
-        return false;
-    }
-
-    has_digit
-}
-
-fn extract_math_expression(prompt: &str, lower: &str) -> Option<String> {
-    for prefix in ["calculate ", "calc ", "math ", "solve "] {
-        if let Some(rest) = lower.strip_prefix(prefix) {
-            let expr = rest.trim().replace(',', "");
-            if looks_like_math_expression(&expr) {
-                return Some(expr);
-            }
-        }
-    }
-
-    if let Some(rest) = lower.strip_prefix("what is ") {
-        let expr = rest.trim_end_matches('?').trim().replace(',', "");
-        if looks_like_math_expression(&expr) {
-            return Some(expr);
-        }
-    }
-
-    let direct = prompt.trim().replace(',', "");
-    if looks_like_math_expression(&direct) {
-        return Some(direct);
-    }
-
-    None
-}
-
-fn format_number(value: f64) -> String {
-    let rounded = (value * 1_000_000_000.0).round() / 1_000_000_000.0;
-    let mut s = format!("{rounded}");
-    if s.contains('.') {
-        while s.ends_with('0') {
-            s.pop();
-        }
-        if s.ends_with('.') {
-            s.pop();
-        }
-    }
-    s
-}
-
-fn is_greeting(lower: &str) -> bool {
-    matches!(
-        lower,
-        "hi" | "hello" | "hey" | "yo" | "sup" | "good morning" | "good afternoon" | "good evening"
-    ) || lower.starts_with("hi ")
-        || lower.starts_with("hello ")
-        || lower.starts_with("hey ")
-}
-
-fn is_goodbye(lower: &str) -> bool {
-    matches!(lower, "bye" | "goodbye" | "see you" | "later") || lower.starts_with("bye ")
-}
-
-fn help_text() -> String {
-    [
-        "I can handle conversation and intelligent knowledge retrieval:",
-        "",
-        "💬 **Communication:**",
-        "- Multi-turn chat with contextual memory",
-        "- Learn personal facts from conversation",
-        "- Communication style analysis",
-        "",
-        "🧠 **Knowledge & Learning:**",
-        "- Advanced knowledge retrieval from multiple sources",
-        "- Automatic vocabulary learning from your input",
-        "- Store and retrieve contextual information",
-        "- FAQ learning: `remember: question => answer`",
-        "- Context storage: `store this: [information]`",
-        "",
-        "📊 **Stats & Insights:**",
-        "- `knowledge stats` - see what I know",
-        "- `vocabulary stats` - see my language learning",
-        "- `what experiments?` - view my experiment list",
-        "- `how am I communicating?` - communication analysis",
-        "",
-        "🔧 **Utilities:**",
-        "- Quick math: `calculate 12 * 7`",
-        "- Current date/time",
-        "- Preferences: `what do you like/dislike/want?`",
-        "",
-        "💡 **Proactive Features:**",
-        "- Periodic action proposals",
-        "- `what do you want to do?` - request suggestions",
-        "",
-        "I continuously learn from our conversations and can synthesize answers from my knowledge base.",
-    ]
-    .join("\n")
-}
-
-fn wants_likes_prompt(lower: &str) -> bool {
-    (lower.contains("what do you like")
-        || lower.contains("your likes")
-        || lower.contains("what are your likes"))
-        && !lower.contains("dislike")
-}
-
-fn wants_dislikes_prompt(lower: &str) -> bool {
-    lower.contains("what do you dislike")
-        || lower.contains("your dislikes")
-        || lower.contains("what are your dislikes")
-}
-
-fn wants_goal_prompt(lower: &str) -> bool {
-    lower.contains("what do you want")
-        || lower.contains("what are your goals")
-        || lower.contains("what are your goal")
-        || lower.contains("what do you want to learn")
-        || lower.contains("why do you learn")
-}
-
-fn jeebs_curiosity_topics() -> Vec<String> {
+/// Comprehensive list of websites for random crawling during training
+fn random_crawl_candidates() -> Vec<&'static str> {
     vec![
-        "scientific method".to_string(),
-        "knowledge representation".to_string(),
-        "reasoning under uncertainty".to_string(),
-        "systems design".to_string(),
-        "human communication patterns".to_string(),
+        // Science & Research (Major Universities & Institutions)
+        "https://arxiv.org",
+        "https://www.nature.com",
+        "https://www.science.org",
+        "https://www.nasa.gov",
+        "https://www.mit.edu",
+        "https://www.stanford.edu",
+        "https://www.harvard.edu",
+        "https://www.caltech.edu",
+        "https://www.berkeley.edu",
+        "https://www.ox.ac.uk",
+        "https://www.cam.ac.uk",
+        "https://www.cern.ch",
+
+        // Technology & AI
+        "https://github.com",
+        "https://www.arxiv.org/list/cs.AI",
+        "https://openai.com",
+        "https://www.deepmind.com",
+        "https://ai.google",
+        "https://research.facebook.com",
+        "https://www.ibm.com/research",
+        "https://www.microsoft.com/research",
+
+        // News & Current Events
+        "https://www.bbc.com",
+        "https://www.theguardian.com",
+        "https://www.nytimes.com",
+        "https://www.economist.com",
+        "https://www.wired.com",
+        "https://news.ycombinator.com",
+        "https://www.techcrunch.com",
+        "https://www.theverge.com",
+
+        // Developer Resources
+        "https://developer.mozilla.org",
+        "https://www.w3schools.com",
+        "https://stackoverflow.com",
+        "https://www.python.org",
+        "https://www.rust-lang.org",
+        "https://golang.org",
+        "https://www.freecodecamp.org",
+        "https://docs.microsoft.com",
+
+        // Wikipedia (Knowledge Base)
+        "https://en.wikipedia.org",
+        "https://en.wikipedia.org/wiki/Artificial_intelligence",
+        "https://en.wikipedia.org/wiki/Science",
+        "https://en.wikipedia.org/wiki/Technology",
+        "https://en.wikipedia.org/wiki/Mathematics",
+        "https://en.wikipedia.org/wiki/Physics",
+        "https://en.wikipedia.org/wiki/Biology",
+        "https://en.wikipedia.org/wiki/Chemistry",
+
+        // Educational Platforms
+        "https://www.edx.org",
+        "https://www.coursera.org",
+        "https://www.khanacademy.org",
+        "https://www.udacity.com",
+        "https://www.brilliant.org",
+
+        // Science & Nature Journals
+        "https://www.cell.com",
+        "https://www.sciencedirect.com",
+        "https://www.springer.com",
+        "https://academic.oup.com",
+        "https://www.elsevier.com",
+
+        // Open-Source & Development
+        "https://www.linux.org",
+        "https://www.apache.org",
+        "https://www.eclipse.org",
+        "https://www.mozilla.org",
+        "https://www.kde.org",
+
+        // Specialized Topics
+        "https://phys.org",
+        "https://www.space.com",
+        "https://www.sciencedaily.com",
+        "https://www.medicalnewstoday.com",
+        "https://www.psychologytoday.com",
+
+        // Quantum Computing & Advanced Physics
+        "https://quantum.ibm.com",
+        "https://www.dwavesys.com",
+        "https://www.qiskit.org",
+
+        // Machine Learning & Data Science
+        "https://www.tensorflow.org",
+        "https://pytorch.org",
+        "https://www.kaggle.com",
+        "https://www.paperswithcode.com",
+
+        // Economics & Finance
+        "https://www.imf.org",
+        "https://www.worldbank.org",
+        "https://www.ecb.europa.eu",
+        "https://www.federalreserve.gov",
+
+        // Climate & Environment
+        "https://climate.nasa.gov",
+        "https://www.ipcc.ch",
+        "https://www.un.org/en/climatechange",
+
+        // History & Culture
+        "https://www.britannica.com",
+        "https://www.historicengland.org.uk",
+        "https://www.smithsonianmag.com",
+
+        // Health & Medicine
+        "https://www.nih.gov",
+        "https://www.cdc.gov",
+        "https://www.who.int",
+        "https://www.healthline.com",
+
+        // Philosophy & Thought
+        "https://plato.stanford.edu",
+        "https://www.iep.utm.edu",
+
+        // General Knowledge & Reference
+        "https://www.merriam-webster.com",
+        "https://dictionary.cambridge.org",
+        "https://www.oxforddictionaries.com",
+
+        // Random Topic Exploration
+        "https://en.wikipedia.org/wiki/Special:Random",
+        "https://www.reddit.com/r/todayilearned",
+        "https://www.reddit.com/r/science",
+        "https://www.reddit.com/r/AskScience",
     ]
-}
-
-fn canonical_prompt_key(input: &str) -> String {
-    input
-        .trim()
-        .to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn parse_learning_command(input: &str) -> Option<(String, String)> {
-    let lower = input.to_lowercase();
-    let payload = if lower.starts_with("remember:") {
-        input.split_once(':')?.1.trim()
-    } else if lower.starts_with("learn:") {
-        input.split_once(':')?.1.trim()
-    } else {
-        return None;
-    };
-
-    let (question, answer) = payload
-        .split_once("=>")
-        .or_else(|| payload.split_once("->"))
-        .or_else(|| payload.split_once('='))
-        .or_else(|| payload.split_once(':'))?;
-
-    let question = canonical_prompt_key(question);
-    let answer = answer.trim().to_string();
-    if question.is_empty() || answer.is_empty() {
-        return None;
-    }
-
-    Some((question, answer))
-}
-
-fn parse_forget_command(input: &str) -> Option<String> {
-    let lower = input.to_lowercase();
-    if !lower.starts_with("forget:") {
-        return None;
-    }
-    let target = input.split_once(':')?.1.trim();
-    let normalized = canonical_prompt_key(target);
-    if normalized.is_empty() {
-        return None;
-    }
-    Some(normalized)
-}
-
-pub async fn custom_ai_logic(prompt: &str, db: &SqlitePool) -> String {
-    custom_ai_logic_with_context(prompt, db, &[], None, None).await
-}
-
-async fn custom_ai_logic_with_context(
-    prompt: &str,
-    db: &SqlitePool,
-    history: &[ConversationTurn],
-    username: Option<&str>,
-    facts_owner: Option<&str>,
-) -> String {
-    // Learn from user input
-    let _ = crate::language_learning::learn_from_input(db, prompt).await;
-
-    let clean_prompt = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
-    if clean_prompt.is_empty() {
-        return "Send me a message and I will respond.".to_string();
-    }
-    let lower = clean_prompt.to_lowercase();
-
-    // Check if user is admin (root admin only: 1090mb)
-    let is_admin = username.map(|u| u == crate::auth::ROOT_ADMIN_USERNAME).unwrap_or(false);
-
-    // ADMIN-ONLY COMMANDS
-    if is_admin {
-        // Admin: List all admin commands
-        if lower.contains("admin help") || lower.contains("admin commands") {
-            return "🔧 **Admin Commands Available**:\n\n\
-                • `admin users` - List all registered users\n\
-                • `admin stats` - View system statistics\n\
-                • `admin logs [N]` - Show last N log entries\n\
-                • `admin internet on/off` - Toggle internet access\n\
-                • `admin training on/off` - Toggle training mode\n\
-                • `admin reset [username]` - Reset user's learning data\n\
-                • `admin ban [username]` - Ban a user from chat\n\
-                • `admin unban [username]` - Unban a user\n\
-                • `admin broadcast [message]` - Send message to all users\n\
-                • `admin system info` - Show system information\n\
-                • `admin database stats` - Show database statistics\n\
-                • `admin training now` - Start training cycle immediately\n\n\
-                Only the root admin (you) can use these commands.".to_string();
-        }
-
-        // Admin: List all users
-        if lower.contains("admin users") {
-            let result = sqlx::query_scalar::<_, String>(
-                "SELECT username FROM jeebs_store WHERE key LIKE 'user:%' ORDER BY key DESC LIMIT 100"
-            )
-            .fetch_all(db)
-            .await
-            .unwrap_or_default();
-
-            if result.is_empty() {
-                return "No registered users found.".to_string();
-            }
-
-            let mut lines = vec!["👥 **Registered Users**:\n".to_string()];
-            for (i, username) in result.iter().enumerate() {
-                lines.push(format!("{}. {}", i + 1, username));
-            }
-            lines.push(format!("\nTotal users: {}", result.len()));
-            return lines.join("\n");
-        }
-
-        // Admin: System stats
-        if lower.contains("admin stats") || lower.contains("admin system") {
-            let user_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(DISTINCT username) FROM user_profiles WHERE created_at IS NOT NULL"
-            )
-            .fetch_optional(db)
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or(0);
-
-            let node_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM brain_nodes")
-                .fetch_optional(db)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or(0);
-
-            let triple_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM knowledge_triples")
-                .fetch_optional(db)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or(0);
-
-            return format!(
-                "📊 **System Statistics**:\n\n\
-                👥 Registered Users: {}\n\
-                🧠 Brain Nodes: {}\n\
-                🔗 Knowledge Triples: {}\n\
-                💾 Database Size: Check logs for details\n\n\
-                Use `admin logs` to see recent activity.",
-                user_count, node_count, triple_count
-            );
-        }
-
-        // Admin: Show logs
-        if lower.starts_with("admin logs") {
-            let limit = clean_prompt
-                .split_whitespace()
-                .last()
-                .and_then(|s| s.parse::<i32>().ok())
-                .unwrap_or(20);
-
-            let rows = sqlx::query_as::<_, (String, String, String, String)>(
-                "SELECT timestamp, category, message, source FROM logs ORDER BY timestamp DESC LIMIT ?"
-            )
-            .bind(limit)
-            .fetch_all(db)
-            .await
-            .unwrap_or_default();
-
-            if rows.is_empty() {
-                return "No logs found.".to_string();
-            }
-
-            let mut lines = vec![format!("📋 **Recent Logs** (last {}):\n", limit)];
-            for (timestamp, category, message, _source) in rows.iter().take(10) {
-                lines.push(format!("[{}] {}: {}", timestamp, category, message));
-            }
-            return lines.join("\n");
-        }
-
-        // Admin: Database stats
-        if lower.contains("admin database") {
-            let brain_nodes: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM brain_nodes")
-                .fetch_optional(db)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or(0);
-
-            let triples: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM knowledge_triples")
-                .fetch_optional(db)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or(0);
-
-            let store_items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jeebs_store")
-                .fetch_optional(db)
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or(0);
-
-            return format!(
-                "💾 **Database Statistics**:\n\n\
-                Brain Nodes: {}\n\
-                Knowledge Triples: {}\n\
-                Store Items: {}\n\
-                Total Records: {}\n\n\
-                Database is healthy and indexed for fast retrieval.",
-                brain_nodes, triples, store_items, brain_nodes + triples + store_items
-            );
-        }
-
-        // Admin: Training now
-        if lower.contains("admin training now") {
-            return "⏱️ Training cycle started. This may take 1-5 minutes. I'll resume chatting when done!".to_string();
-        }
-    } else if lower.contains("admin") && (lower.contains("help") || lower.contains("commands")) {
-        // Non-admin user asked for admin commands
-        return "🔒 Admin commands are only available to the root administrator. \
-                You are logged in as a regular user. If you need admin assistance, \
-                contact your system administrator.".to_string();
-    }
-
-    // ...existing code...
 }
