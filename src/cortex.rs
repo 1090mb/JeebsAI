@@ -85,6 +85,14 @@ struct ConversationTurn {
     timestamp: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct LearnedFact {
+    fact: String,
+    canonical: String,
+    created_at: String,
+    updated_at: String,
+}
+
 const MAX_HISTORY_TURNS: usize = 24;
 const MAX_HISTORY_CHARS_PER_TURN: usize = 600;
 
@@ -181,7 +189,10 @@ async fn save_conversation_history(
     Ok(())
 }
 
-fn last_turn_by_role<'a>(history: &'a [ConversationTurn], role: &str) -> Option<&'a ConversationTurn> {
+fn last_turn_by_role<'a>(
+    history: &'a [ConversationTurn],
+    role: &str,
+) -> Option<&'a ConversationTurn> {
     history.iter().rev().find(|turn| turn.role == role)
 }
 
@@ -232,6 +243,307 @@ fn recent_conversation_summary(history: &[ConversationTurn]) -> Option<String> {
     let mut ordered = recent;
     ordered.reverse();
     Some(ordered.join(" | "))
+}
+
+fn normalize_fact_text(input: &str) -> String {
+    input
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .trim_matches(|ch: char| matches!(ch, '.' | ',' | '!' | ';'))
+        .to_string()
+}
+
+fn extract_learnable_fact(prompt: &str) -> Option<String> {
+    let clean = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
+    if clean.is_empty() {
+        return None;
+    }
+
+    let lower = clean.to_lowercase();
+    if clean.ends_with('?')
+        || lower.starts_with("remember:")
+        || lower.starts_with("learn:")
+        || lower.starts_with("forget:")
+    {
+        return None;
+    }
+
+    for prefix in [
+        "remember that ",
+        "remember this ",
+        "please remember that ",
+        "please remember ",
+        "for future reference ",
+        "fyi ",
+    ] {
+        if lower.starts_with(prefix) {
+            let fact = normalize_fact_text(&clean[prefix.len()..]);
+            if !fact.is_empty() {
+                return Some(fact);
+            }
+        }
+    }
+
+    if lower.starts_with("my ") {
+        let likely_fact = lower.contains(" is ")
+            || lower.contains(" are ")
+            || lower.contains(" was ")
+            || lower.contains(" were ")
+            || lower.contains(" favorite ")
+            || lower.contains(" favourite ");
+        if likely_fact {
+            let fact = normalize_fact_text(&clean);
+            if !fact.is_empty() {
+                return Some(fact);
+            }
+        }
+    }
+
+    for prefix in [
+        "i am ",
+        "i'm ",
+        "i live in ",
+        "i live at ",
+        "i work at ",
+        "i work in ",
+        "i like ",
+        "i love ",
+        "i prefer ",
+    ] {
+        if lower.starts_with(prefix) {
+            let fact = normalize_fact_text(&clean);
+            if !fact.is_empty() {
+                return Some(fact);
+            }
+        }
+    }
+
+    None
+}
+
+fn sanitize_key_segment(input: &str) -> String {
+    let mut out = String::new();
+    for ch in input.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.') {
+            out.push(ch.to_ascii_lowercase());
+        }
+    }
+    if out.is_empty() {
+        "anonymous".to_string()
+    } else {
+        out
+    }
+}
+
+fn fact_owner_key(user_id: &str, username: Option<&str>) -> String {
+    if let Some(name) = username {
+        return format!("user:{}", sanitize_key_segment(name));
+    }
+    format!("session:{}", sanitize_key_segment(user_id))
+}
+
+fn fact_prefix(owner: &str) -> String {
+    format!("chat:fact:{owner}:")
+}
+
+fn fact_storage_key(owner: &str, canonical: &str) -> String {
+    format!(
+        "{}{}",
+        fact_prefix(owner),
+        blake3::hash(canonical.as_bytes()).to_hex()
+    )
+}
+
+fn parse_learned_fact_bytes(bytes: &[u8]) -> Option<LearnedFact> {
+    let parsed = serde_json::from_slice::<LearnedFact>(bytes).ok()?;
+    let fact = sanitize_turn_content(&parsed.fact);
+    let canonical = canonical_prompt_key(&parsed.canonical);
+    if fact.is_empty() || canonical.is_empty() {
+        return None;
+    }
+    Some(LearnedFact {
+        fact,
+        canonical,
+        created_at: parsed.created_at,
+        updated_at: parsed.updated_at,
+    })
+}
+
+async fn save_learned_fact(
+    db: &SqlitePool,
+    owner: &str,
+    fact: &str,
+) -> Result<LearnedFact, sqlx::Error> {
+    let cleaned_fact = sanitize_turn_content(fact);
+    let canonical = canonical_prompt_key(&cleaned_fact);
+    let key = fact_storage_key(owner, &canonical);
+    let now = Local::now().to_rfc3339();
+
+    let existing = sqlx::query("SELECT value FROM jeebs_store WHERE key = ? LIMIT 1")
+        .bind(&key)
+        .fetch_optional(db)
+        .await?;
+
+    let created_at = existing
+        .and_then(|row| {
+            let value: Vec<u8> = row.get(0);
+            parse_learned_fact_bytes(&value)
+                .map(|fact| fact.created_at)
+                .or_else(|| {
+                    decode_all(&value)
+                        .ok()
+                        .and_then(|d| parse_learned_fact_bytes(&d))
+                        .map(|fact| fact.created_at)
+                })
+        })
+        .unwrap_or_else(|| now.clone());
+
+    let payload = LearnedFact {
+        fact: cleaned_fact.clone(),
+        canonical: canonical.clone(),
+        created_at,
+        updated_at: now,
+    };
+
+    let bytes = serde_json::to_vec(&payload).unwrap_or_default();
+    sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+        .bind(&key)
+        .bind(bytes)
+        .execute(db)
+        .await?;
+
+    Ok(payload)
+}
+
+async fn load_learned_facts(db: &SqlitePool, owner: &str) -> Vec<LearnedFact> {
+    let pattern = format!("{}%", fact_prefix(owner));
+    let rows = sqlx::query("SELECT value FROM jeebs_store WHERE key LIKE ? ORDER BY key ASC")
+        .bind(pattern)
+        .fetch_all(db)
+        .await
+        .unwrap_or_default();
+
+    let mut facts = Vec::new();
+    for row in rows {
+        let value: Vec<u8> = row.get(0);
+        if let Some(fact) = parse_learned_fact_bytes(&value) {
+            facts.push(fact);
+            continue;
+        }
+        if let Ok(decoded) = decode_all(&value) {
+            if let Some(fact) = parse_learned_fact_bytes(&decoded) {
+                facts.push(fact);
+            }
+        }
+    }
+
+    facts
+}
+
+fn is_token_stopword(token: &str) -> bool {
+    matches!(
+        token,
+        "the"
+            | "a"
+            | "an"
+            | "and"
+            | "or"
+            | "of"
+            | "to"
+            | "for"
+            | "in"
+            | "on"
+            | "is"
+            | "are"
+            | "do"
+            | "did"
+            | "you"
+            | "your"
+            | "my"
+            | "me"
+            | "what"
+            | "who"
+            | "how"
+            | "why"
+            | "about"
+            | "remember"
+            | "know"
+    )
+}
+
+fn tokenize_for_matching(input: &str) -> Vec<String> {
+    let mut normalized = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch.to_ascii_lowercase());
+        } else {
+            normalized.push(' ');
+        }
+    }
+
+    normalized
+        .split_whitespace()
+        .filter(|token| token.len() >= 3 && !is_token_stopword(token))
+        .map(|token| token.to_string())
+        .collect()
+}
+
+fn rank_relevant_facts(facts: &[LearnedFact], query: &str, limit: usize) -> Vec<LearnedFact> {
+    let query_tokens = tokenize_for_matching(query);
+    if query_tokens.is_empty() {
+        return Vec::new();
+    }
+
+    let query_lower = query.to_lowercase();
+    let mut scored = Vec::new();
+    for fact in facts {
+        let fact_lower = fact.fact.to_lowercase();
+        let mut score = 0_i32;
+        for token in &query_tokens {
+            if fact_lower.contains(token) || fact.canonical.contains(token) {
+                score += 1;
+            }
+        }
+        if query_lower.contains(&fact.canonical) || fact_lower.contains(&query_lower) {
+            score += 3;
+        }
+        if score > 0 {
+            scored.push((score, fact.updated_at.clone(), fact.clone()));
+        }
+    }
+
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, _, fact)| fact)
+        .collect()
+}
+
+fn most_recent_facts(facts: &[LearnedFact], limit: usize) -> Vec<LearnedFact> {
+    let mut sorted = facts.to_vec();
+    sorted.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    sorted.into_iter().take(limit).collect()
+}
+
+fn wants_personal_memory_overview(lower: &str) -> bool {
+    lower.contains("what do you know about me")
+        || lower.contains("what do you remember about me")
+        || lower.contains("what have you learned about me")
+        || lower.contains("tell me about me")
+        || lower.contains("remind me what you know about me")
+}
+
+fn wants_personal_memory_lookup(lower: &str) -> bool {
+    lower.contains("do you remember")
+        || lower.contains("what is my ")
+        || lower.contains("what's my ")
+        || lower.contains("what are my ")
+        || lower.contains("where do i live")
+        || lower.contains("what do i like")
+        || lower.contains("tell me my ")
 }
 
 pub async fn search_knowledge(db: &SqlitePool, query: &str) -> Vec<BrainNode> {
@@ -354,7 +666,10 @@ fn looks_like_math_expression(expr: &str) -> bool {
             has_digit = true;
             continue;
         }
-        if matches!(ch, ' ' | '+' | '-' | '*' | '/' | '(' | ')' | '.' | '^' | '%') {
+        if matches!(
+            ch,
+            ' ' | '+' | '-' | '*' | '/' | '(' | ')' | '.' | '^' | '%'
+        ) {
             continue;
         }
         return false;
@@ -419,6 +734,7 @@ fn help_text() -> String {
     [
         "I can handle conversation and basic assistant tasks:",
         "- multi-turn chat with short memory per session",
+        "- learns personal facts from normal chat (example: `my favorite color is blue`)",
         "- greetings and short conversation",
         "- quick math (example: calculate 12 * 7)",
         "- current date/time",
@@ -478,7 +794,7 @@ fn parse_forget_command(input: &str) -> Option<String> {
 }
 
 pub async fn custom_ai_logic(prompt: &str, db: &SqlitePool) -> String {
-    custom_ai_logic_with_context(prompt, db, &[], None).await
+    custom_ai_logic_with_context(prompt, db, &[], None, None).await
 }
 
 async fn custom_ai_logic_with_context(
@@ -486,12 +802,18 @@ async fn custom_ai_logic_with_context(
     db: &SqlitePool,
     history: &[ConversationTurn],
     username: Option<&str>,
+    facts_owner: Option<&str>,
 ) -> String {
     let clean_prompt = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
     if clean_prompt.is_empty() {
         return "Send me a message and I will respond.".to_string();
     }
     let lower = clean_prompt.to_lowercase();
+    let learned_facts = if let Some(owner) = facts_owner {
+        load_learned_facts(db, owner).await
+    } else {
+        Vec::new()
+    };
 
     if lower.contains("what did i just say") || lower.contains("what was my last message") {
         if let Some(previous_user) = last_turn_by_role(history, "user") {
@@ -517,6 +839,12 @@ async fn custom_ai_logic_with_context(
     if lower.contains("what is my name") || lower.contains("who am i") {
         for turn in history.iter().rev().filter(|turn| turn.role == "user") {
             if let Some(name) = extract_name_from_intro(&turn.content.to_lowercase()) {
+                return format!("You told me your name is {name}.");
+            }
+        }
+
+        for fact in most_recent_facts(&learned_facts, 12) {
+            if let Some(name) = extract_name_from_intro(&fact.fact.to_lowercase()) {
                 return format!("You told me your name is {name}.");
             }
         }
@@ -600,12 +928,53 @@ async fn custom_ai_logic_with_context(
         };
     }
 
+    if wants_personal_memory_overview(&lower) {
+        if learned_facts.is_empty() {
+            return "I have not learned personal details from you yet. Tell me something like \"my favorite color is blue\".".to_string();
+        }
+
+        let recent = most_recent_facts(&learned_facts, 6);
+        let mut lines = vec!["Here is what I have learned about you:".to_string()];
+        for (idx, fact) in recent.iter().enumerate() {
+            lines.push(format!("{}. {}", idx + 1, fact.fact));
+        }
+        return lines.join("\n");
+    }
+
+    if wants_personal_memory_lookup(&lower) {
+        if learned_facts.is_empty() {
+            return "I do not have any personal facts saved yet. Tell me details and I will remember.".to_string();
+        }
+
+        let mut matches = rank_relevant_facts(&learned_facts, &clean_prompt, 3);
+        if matches.is_empty() && lower.contains("do you remember") {
+            matches = most_recent_facts(&learned_facts, 3);
+        }
+
+        if matches.is_empty() {
+            return "I could not match that to a saved detail yet. Ask \"what do you know about me\" to review what I have learned.".to_string();
+        }
+
+        if matches.len() == 1 {
+            return format!("You told me: {}.", matches[0].fact);
+        }
+
+        let mut lines = vec!["You told me:".to_string()];
+        for (idx, fact) in matches.iter().enumerate() {
+            lines.push(format!("{}. {}", idx + 1, fact.fact));
+        }
+        return lines.join("\n");
+    }
+
     if is_goodbye(&lower) {
         return "See you soon.".to_string();
     }
 
     if lower == "time" || lower.contains("what time") || lower.contains("current time") {
-        return format!("Current server time: {}", Local::now().format("%Y-%m-%d %H:%M:%S %Z"));
+        return format!(
+            "Current server time: {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S %Z")
+        );
     }
 
     if lower == "date"
@@ -613,10 +982,7 @@ async fn custom_ai_logic_with_context(
         || lower.contains("what day")
         || lower == "today"
     {
-        return format!(
-            "Today is {}.",
-            Local::now().format("%A, %B %d, %Y")
-        );
+        return format!("Today is {}.", Local::now().format("%A, %B %d, %Y"));
     }
 
     if let Some(expr) = extract_math_expression(&clean_prompt, &lower) {
@@ -680,7 +1046,30 @@ impl Cortex {
         username: Option<&str>,
     ) -> String {
         let mut history = load_conversation_history(&state.db, user_id).await;
-        let response = custom_ai_logic_with_context(prompt, &state.db, &history, username).await;
+        let facts_owner = fact_owner_key(user_id, username);
+        let learned_fact = if let Some(fact) = extract_learnable_fact(prompt) {
+            match save_learned_fact(&state.db, &facts_owner, &fact).await {
+                Ok(saved) => Some(saved),
+                Err(err) => {
+                    eprintln!("[WARN] failed to store learned fact: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let mut response =
+            custom_ai_logic_with_context(prompt, &state.db, &history, username, Some(&facts_owner))
+                .await;
+
+        if let Some(fact) = learned_fact.as_ref() {
+            if response == "Got it. Keep chatting with me and I will help with what I can."
+                || response.starts_with("I am still learning that topic.")
+            {
+                response = format!("I learned that {}.", fact.fact);
+            }
+        }
 
         let now = Local::now().to_rfc3339();
         let user_content = sanitize_turn_content(prompt);
@@ -719,13 +1108,13 @@ impl Cortex {
             "INSERT OR IGNORE INTO brain_nodes (id, label, summary, data, created_at)
              VALUES (?, ?, ?, ?, ?)",
         )
-            .bind("seed:intro")
-            .bind("hello")
-            .bind("Hello! I am JeebsAI, your personal assistant.")
-            .bind(seed_payload)
-            .bind(Local::now().to_rfc3339())
-            .execute(db)
-            .await;
+        .bind("seed:intro")
+        .bind("hello")
+        .bind("Hello! I am JeebsAI, your personal assistant.")
+        .bind(seed_payload)
+        .bind(Local::now().to_rfc3339())
+        .execute(db)
+        .await;
         println!("Brain knowledge seeded.");
     }
 
@@ -866,8 +1255,7 @@ fn normalize_url(url: &reqwest::Url) -> String {
 
     let mut output = format!("{scheme}://{host}");
     if let Some(port) = normalized.port() {
-        let is_default =
-            (scheme == "http" && port == 80) || (scheme == "https" && port == 443);
+        let is_default = (scheme == "http" && port == 80) || (scheme == "https" && port == 443);
         if !is_default {
             output.push(':');
             output.push_str(&port.to_string());
@@ -1046,7 +1434,10 @@ async fn crawl_and_store(
         };
         let excerpt = truncate_chars(&full_text, 5000);
 
-        let node_id = format!("crawl:{}", blake3::hash(normalized_current.as_bytes()).to_hex());
+        let node_id = format!(
+            "crawl:{}",
+            blake3::hash(normalized_current.as_bytes()).to_hex()
+        );
         let payload = serde_json::to_vec(&json!({
             "source": "crawler",
             "url": current.as_str(),

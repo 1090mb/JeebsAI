@@ -157,6 +157,26 @@
                 padding: 5px;
                 border-radius: 3px;
             }
+            .thinker-panel {
+                background: var(--bg-card);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                padding: 10px 12px;
+                margin: 12px 0 16px;
+                font-size: 0.92rem;
+            }
+            .thinker-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                gap: 8px 12px;
+                margin-top: 8px;
+            }
+            .thinker-metric {
+                background: rgba(0, 0, 0, 0.15);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 6px 8px;
+            }
         </style>
     </head>
     <body>
@@ -165,6 +185,44 @@
             <button class="theme-toggle" onclick="toggleTheme()">
                 🌓 Theme
             </button>
+        </div>
+        <div class="thinker-panel">
+            <div
+                style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                "
+            >
+                <strong>Autonomous Thinker</strong>
+                <span id="thinker-last-cycle" style="color: #90caf9"></span>
+            </div>
+            <div class="thinker-grid">
+                <div class="thinker-metric" id="metric-status">Status: -</div>
+                <div class="thinker-metric" id="metric-pending">Pending: -</div>
+                <div class="thinker-metric" id="metric-total">
+                    Total proposals: -
+                </div>
+                <div class="thinker-metric" id="metric-warn">WARN (24h): -</div>
+                <div class="thinker-metric" id="metric-error">
+                    ERROR (24h): -
+                </div>
+                <div class="thinker-metric" id="metric-brain">
+                    Brain nodes: -
+                </div>
+                <div class="thinker-metric" id="metric-unknown">
+                    Unknown Qs (24h): -
+                </div>
+                <div class="thinker-metric" id="metric-reason">
+                    Last reason: -
+                </div>
+            </div>
+            <div
+                id="metric-topics"
+                style="margin-top: 8px; font-size: 0.85rem; color: #b0bec5"
+            ></div>
         </div>
         <div id="notifications-area"></div>
         <div
@@ -186,7 +244,7 @@
                 <option value="rolled_back">Rolled Back</option>
             </select>
             <button class="btn-apply" onclick="brainstormUpdate()">
-                Brainstorm Update
+                Think Now
             </button>
             <button class="btn-resolve" onclick="loadUpdates()">Refresh</button>
             <a
@@ -211,6 +269,7 @@
             let allUpdates = [];
             let userRole = "";
             let rootAdminAuthorized = false;
+            let evolutionStatus = null;
 
             // Theme Init
             if (localStorage.getItem("theme") === "light")
@@ -304,7 +363,69 @@
                 userRole = data.role;
                 setStatus(`Loaded ${allUpdates.length} evolution proposal(s).`);
                 loadNotifications();
+                loadEvolutionStatus();
                 renderUpdates();
+            }
+
+            function renderEvolutionStatus() {
+                const lastCycle = document.getElementById("thinker-last-cycle");
+                const metricStatus = document.getElementById("metric-status");
+                const metricPending = document.getElementById("metric-pending");
+                const metricTotal = document.getElementById("metric-total");
+                const metricWarn = document.getElementById("metric-warn");
+                const metricError = document.getElementById("metric-error");
+                const metricBrain = document.getElementById("metric-brain");
+                const metricUnknown = document.getElementById("metric-unknown");
+                const metricReason = document.getElementById("metric-reason");
+                const metricTopics = document.getElementById("metric-topics");
+
+                if (!evolutionStatus) {
+                    lastCycle.textContent = "";
+                    metricStatus.textContent = "Status: unavailable";
+                    metricPending.textContent = "Pending: -";
+                    metricTotal.textContent = "Total proposals: -";
+                    metricWarn.textContent = "WARN (24h): -";
+                    metricError.textContent = "ERROR (24h): -";
+                    metricBrain.textContent = "Brain nodes: -";
+                    metricUnknown.textContent = "Unknown Qs (24h): -";
+                    metricReason.textContent = "Last reason: -";
+                    metricTopics.textContent = "";
+                    return;
+                }
+
+                const state = evolutionStatus.state || {};
+                const lastCycleRaw = state.last_cycle_at || state.started_at;
+                lastCycle.textContent = lastCycleRaw
+                    ? `Last cycle: ${new Date(lastCycleRaw).toLocaleString()}`
+                    : "Last cycle: unknown";
+                metricStatus.textContent = `Status: ${state.status || "unknown"}`;
+                metricPending.textContent = `Pending: ${evolutionStatus.pending_updates ?? 0}`;
+                metricTotal.textContent = `Total proposals: ${evolutionStatus.total_updates ?? 0}`;
+                metricWarn.textContent = `WARN (24h): ${evolutionStatus.warn_last_24h ?? 0}`;
+                metricError.textContent = `ERROR (24h): ${evolutionStatus.error_last_24h ?? 0}`;
+                metricBrain.textContent = `Brain nodes: ${evolutionStatus.brain_nodes_count ?? 0}`;
+                metricUnknown.textContent = `Unknown Qs (24h): ${evolutionStatus.unanswered_questions_last_24h ?? 0}`;
+                metricReason.textContent = `Last reason: ${state.last_reason || "n/a"}`;
+                const topics = evolutionStatus.top_unknown_topics || [];
+                metricTopics.textContent =
+                    topics.length > 0
+                        ? `Top unknown topics: ${topics.join(", ")}`
+                        : "Top unknown topics: none";
+            }
+
+            async function loadEvolutionStatus() {
+                if (!rootAdminAuthorized) return;
+                const res = await fetch("/api/admin/evolution/status", {
+                    credentials: "same-origin",
+                    headers: authHeaders(),
+                });
+                if (!res.ok) {
+                    evolutionStatus = null;
+                    renderEvolutionStatus();
+                    return;
+                }
+                evolutionStatus = await res.json();
+                renderEvolutionStatus();
             }
 
             function renderUpdates() {
@@ -539,7 +660,7 @@
             }
 
             async function brainstormUpdate() {
-                const res = await fetch("/api/evolution/brainstorm", {
+                const res = await fetch("/api/admin/evolution/think", {
                     method: "POST",
                     credentials: "same-origin",
                     headers: authHeaders(),
@@ -555,7 +676,10 @@
                     return;
                 }
                 const payload = await res.json();
-                setStatus(payload.message || "Brainstorm complete.");
+                const reason = payload.reason ? ` (${payload.reason})` : "";
+                setStatus(
+                    (payload.message || "Think cycle complete.") + reason,
+                );
                 loadUpdates();
             }
 
@@ -573,6 +697,8 @@
                 const allowed = await ensureRootAdminAccess();
                 if (!allowed) return;
                 loadUpdates();
+                loadEvolutionStatus();
+                setInterval(loadEvolutionStatus, 15000);
             })();
         </script>
     </body>

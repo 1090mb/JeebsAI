@@ -54,6 +54,9 @@ async fn main() -> std::io::Result<()> {
         internet_enabled: std::sync::Arc::new(std::sync::RwLock::new(false)),
     });
 
+    // Start Jeebs autonomous evolution loop.
+    evolution::spawn_autonomous_thinker(state.db.clone());
+
     let port: u16 = env::var("PORT")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -116,6 +119,8 @@ async fn main() -> std::io::Result<()> {
             .service(logging::ws_index)
             .service(logging::get_my_logs)
             .service(evolution::list_updates)
+            .service(evolution::get_evolution_status)
+            .service(evolution::run_think_cycle)
             .service(evolution::apply_update)
             .service(evolution::deny_update)
             .service(evolution::resolve_update)
