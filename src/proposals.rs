@@ -108,6 +108,20 @@ pub async fn generate_proactive_proposal(db: &SqlitePool) -> Option<ProactivePro
     .map(|row| row.get(0))
     .unwrap_or(0);
 
+    // Try to generate insight-based proposals first (based on learned data)
+    if (Local::now().timestamp() % 5) == 0 {
+        if let Ok(insight_proposals) = crate::data_synthesis::generate_insight_proposals(db).await {
+            if let Some(insight) = insight_proposals.first() {
+                return Some(ProactiveProposal {
+                    action_type: format!("insight_{}", insight.proposal_type),
+                    description: insight.title.clone(),
+                    reason: insight.description.clone(),
+                    created_at: Local::now().to_rfc3339(),
+                });
+            }
+        }
+    }
+
     // Determine which type of action to propose
     let action_type = if pending_count > 0 && (Local::now().timestamp() % 4) == 0 {
         "evolution"
@@ -133,6 +147,19 @@ pub async fn generate_proactive_proposal(db: &SqlitePool) -> Option<ProactivePro
             }
         }
         "learn" => {
+            // Try data-driven learning suggestions first
+            if let Ok(profile) = crate::data_synthesis::generate_knowledge_insights(db).await {
+                if let Some(gap) = profile.knowledge_gaps.first() {
+                    return Some(ProactiveProposal {
+                        action_type: "learn".to_string(),
+                        description: format!("Fill knowledge gap: {}", gap),
+                        reason: "Based on my analysis of learned content, this gap could improve my understanding".to_string(),
+                        created_at: Local::now().to_rfc3339(),
+                    });
+                }
+            }
+
+            // Fallback to predefined topics
             let index = (Local::now().timestamp() as usize) % LEARNING_TOPICS.len();
             let topic = LEARNING_TOPICS[index];
             ProactiveProposal {

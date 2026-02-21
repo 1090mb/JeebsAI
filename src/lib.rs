@@ -3,6 +3,7 @@ pub mod auth;
 pub mod chat;
 pub mod cli;
 pub mod cortex;
+pub mod data_synthesis;
 pub mod evolution;
 pub mod knowledge_retrieval;
 pub mod language_learning;
