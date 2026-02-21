@@ -1,0 +1,92 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║      🔍 TRAINING ERROR DIAGNOSIS - INTERNET DISABLED 🔍     ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+YOUR LOG ERROR:
+═══════════════════════════════════════════════════════════════
+
+[2026-02-21T15:42:46] training_mode/INFO: Training cycle complete.
+  duration_ms=4
+  topics=0
+  websites=0
+  nodes_written=0
+  crawl_pages_visited=0
+  crawl_links_followed=0
+  wiki_docs=0
+  errors=1  ❌
+
+
+THE PROBLEM:
+═══════════════════════════════════════════════════════════════
+
+Training mode is running but failing immediately with 1 error:
+
+  ❌ "internet is disabled; enable it in admin first"
+
+
+ROOT CAUSE:
+═══════════════════════════════════════════════════════════════
+
+The training system checks if internet is enabled before starting.
+If internet is disabled, it returns immediately with an error.
+
+From src/cortex.rs line 1639:
+  if !*state.internet_enabled.read().unwrap() {
+      report.errors.push("internet is disabled; enable it...");
+      return report;  // Exits immediately
+  }
+
+
+WHY INTERNET IS DISABLED:
+═══════════════════════════════════════════════════════════════
+
+By default, Jeebs starts with internet DISABLED for security:
+  src/main.rs line 132:
+    internet_enabled: Arc::new(RwLock::new(false))  ← Default: false
+
+
+THE SOLUTION:
+═══════════════════════════════════════════════════════════════
+
+You need to ENABLE INTERNET in the admin dashboard.
+
+API endpoints exist:
+  ✅ GET  /api/admin/internet/status
+  ✅ POST /api/admin/internet/set
+
+But there's NO UI button for it yet!
+
+
+WHAT I'LL FIX:
+═══════════════════════════════════════════════════════════════
+
+I'm adding an "Internet Toggle" section to the admin dashboard:
+
+  [ Internet: 🔴 DISABLED ]  [ENABLE INTERNET]
+
+After enabling:
+
+  [ Internet: 🟢 ENABLED ]   [DISABLE INTERNET]
+
+This will let you toggle internet on/off easily.
+
+
+AFTER ENABLING INTERNET:
+═══════════════════════════════════════════════════════════════
+
+Training cycles will work correctly:
+  ✅ topics > 0
+  ✅ websites > 0
+  ✅ nodes_written > 0
+  ✅ crawl_pages_visited > 0
+  ✅ errors = 0
+
+
+═══════════════════════════════════════════════════════════════
+
+Adding UI now to enable internet access...
+
+═══════════════════════════════════════════════════════════════

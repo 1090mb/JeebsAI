@@ -88,6 +88,60 @@
             </div>
 
             <div
+                id="internetToggle"
+                style="
+                    background: #23283a;
+                    padding: 16px;
+                    border-radius: 12px;
+                    margin-bottom: 20px;
+                    border: 1px solid #ff6b6b;
+                    text-align: center;
+                "
+            >
+                <h3 style="margin-top: 0; color: #ff6b6b">
+                    🌐 Internet Access
+                </h3>
+                <div
+                    style="
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        gap: 15px;
+                    "
+                >
+                    <div
+                        id="internetStatus"
+                        style="
+                            font-size: 1.1em;
+                            font-weight: bold;
+                            color: #ff6b6b;
+                        "
+                    >
+                        Loading...
+                    </div>
+                    <button
+                        id="internetToggleBtn"
+                        onclick="toggleInternet()"
+                        style="
+                            padding: 10px 20px;
+                            background: #7fffd4;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-weight: bold;
+                            color: #181c24;
+                            font-size: 14px;
+                        "
+                    >
+                        TOGGLE
+                    </button>
+                </div>
+                <div style="margin-top: 10px; color: #aaa; font-size: 0.9em">
+                    Enable internet for training mode and web crawling
+                </div>
+            </div>
+
+            <div
                 id="serverLogs"
                 style="
                     background: #23283a;
@@ -776,6 +830,94 @@
                 }
             }
 
+            async function loadInternetStatus() {
+                if (!rootAdminAuthorized) return;
+                try {
+                    const res = await fetch("/api/admin/internet/status", {
+                        headers: authHeaders(),
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const statusEl =
+                            document.getElementById("internetStatus");
+                        const toggleBox =
+                            document.getElementById("internetToggle");
+
+                        if (data.enabled) {
+                            statusEl.innerHTML =
+                                '🟢 <span style="color: #8bc34a;">ENABLED</span>';
+                            statusEl.style.color = "#8bc34a";
+                            toggleBox.style.borderColor = "#8bc34a";
+                            document.querySelector(
+                                "#internetToggle h3",
+                            ).style.color = "#8bc34a";
+                        } else {
+                            statusEl.innerHTML =
+                                '🔴 <span style="color: #ff6b6b;">DISABLED</span>';
+                            statusEl.style.color = "#ff6b6b";
+                            toggleBox.style.borderColor = "#ff6b6b";
+                            document.querySelector(
+                                "#internetToggle h3",
+                            ).style.color = "#ff6b6b";
+                        }
+                    } else {
+                        document.getElementById("internetStatus").innerText =
+                            "Error loading status";
+                    }
+                } catch {
+                    document.getElementById("internetStatus").innerText =
+                        "Error";
+                }
+            }
+
+            async function toggleInternet() {
+                if (!rootAdminAuthorized) return;
+
+                // Get current status
+                const statusRes = await fetch("/api/admin/internet/status", {
+                    headers: authHeaders(),
+                });
+
+                if (!statusRes.ok) {
+                    alert("Failed to get current internet status");
+                    return;
+                }
+
+                const currentStatus = await statusRes.json();
+                const newEnabled = !currentStatus.enabled;
+
+                // Confirm with user
+                const action = newEnabled ? "ENABLE" : "DISABLE";
+                if (
+                    !confirm(
+                        `Are you sure you want to ${action} internet access?\n\n${newEnabled ? "This allows Jeebs to crawl websites and learn from the internet." : "This will prevent training mode from working."}`,
+                    )
+                ) {
+                    return;
+                }
+
+                // Toggle internet
+                const res = await fetch("/api/admin/internet/set", {
+                    method: "POST",
+                    headers: authHeaders(true),
+                    body: JSON.stringify({ enabled: newEnabled }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    loadInternetStatus();
+                    alert(
+                        data.message ||
+                            `Internet ${newEnabled ? "enabled" : "disabled"} successfully!`,
+                    );
+                } else {
+                    const errorData = await res.json().catch(() => ({}));
+                    alert(
+                        `Failed to toggle internet: ${errorData.error || "Unknown error"}`,
+                    );
+                }
+            }
+
             async function bootstrapDashboard() {
                 const allowed = await ensureRootAdminAccess();
                 if (!allowed) return;
@@ -783,11 +925,13 @@
                 loadStatus();
                 loadLogs();
                 loadSessions();
+                loadInternetStatus();
 
                 setInterval(() => {
                     loadStatus();
                     loadLogs();
                     loadSessions();
+                    loadInternetStatus();
                 }, 5000);
             }
 
