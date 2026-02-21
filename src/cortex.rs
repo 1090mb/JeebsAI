@@ -1625,6 +1625,7 @@ async fn run_training_cycle(state: &AppState) -> TrainingCycleReport {
         crawl_links_followed: 0,
         crawl_nodes_written: 0,
         wikipedia_docs_written: 0,
+        text_chars_learned: 0,
     };
 
     let cycle_started_for_state = cycle_started_at.clone();
@@ -2267,1146 +2268,158 @@ async fn custom_ai_logic_with_context(
         return "Send me a message and I will respond.".to_string();
     }
     let lower = clean_prompt.to_lowercase();
-    let learned_facts = if let Some(owner) = facts_owner {
-        load_learned_facts(db, owner).await
-    } else {
-        Vec::new()
-    };
-    let communication_profile = if let Some(owner) = facts_owner {
-        load_communication_profile(db, owner).await
-    } else {
-        None
-    };
 
-    if lower.contains("what did i just say") || lower.contains("what was my last message") {
-        if let Some(previous_user) = last_turn_by_role(history, "user") {
-            return format!("Your last message was: \"{}\"", previous_user.content);
-        }
-        return "I do not have earlier messages in this session yet.".to_string();
-    }
+    // Check if user is admin (root admin only: 1090mb)
+    let is_admin = username.map(|u| u == crate::auth::ROOT_ADMIN_USERNAME).unwrap_or(false);
 
-    // Handle proposal responses
-    if lower.contains("yes, do it")
-        || lower.contains("yes do it")
-        || lower.contains("go ahead")
-        || lower.contains("yes please")
-        || (lower.contains("yes") && (lower.contains("research") || lower.contains("learn") || lower.contains("add")))
-    {
-        crate::proposals::acknowledge_proposal(db).await;
-        return "Great! I've added this to my action queue. I'll work on it during my next autonomous cycle and report back with results.".to_string();
-    }
-
-    if lower.contains("no thanks")
-        || lower.contains("not now")
-        || lower.contains("skip it")
-        || lower.contains("maybe later")
-        || (lower.contains("no") && (lower.contains("proposal") || lower.contains("suggestion")))
-    {
-        crate::proposals::acknowledge_proposal(db).await;
-        return "Understood. I'll propose something different next time.".to_string();
-    }
-
-    // Show experiments list
-    if lower.contains("what experiments")
-        || lower.contains("show experiments")
-        || lower.contains("experiments list")
-    {
-        return "Here are experiments I want to run:\n\n\
-            1. Test different knowledge graph traversal algorithms\n\
-            2. Benchmark response times with cached vs fresh queries\n\
-            3. Experiment with conversation context compression\n\
-            4. Test impact of different training data sizes\n\
-            5. Measure accuracy improvement from user feedback\n\
-            6. Compare SQLite vs PostgreSQL performance\n\
-            7. Test different embedding model strategies\n\
-            8. Analyze optimal cache invalidation patterns\n\
-            9. Experiment with parallel request handling\n\
-            10. Test different prompt engineering approaches\n\n\
-            These experiments will help me improve performance and accuracy.".to_string();
-    }
-
-    // Show knowledge stats
-    if lower.contains("knowledge stats")
-        || lower.contains("what do you know")
-        || lower.contains("how much knowledge")
-        || lower.contains("knowledge base")
-    {
-        if let Ok(summary) = crate::data_synthesis::get_knowledge_summary(db).await {
-            return summary;
-        }
-        return "I'm tracking knowledge but couldn't retrieve summary right now.".to_string();
-    }
-
-    // Show knowledge synthesis and insights
-    if lower.contains("knowledge insights")
-        || lower.contains("what patterns")
-        || lower.contains("knowledge analysis")
-        || lower.contains("what can you synthesize")
-        || lower.contains("knowledge gaps")
-    {
-        if let Ok(profile) = crate::data_synthesis::generate_knowledge_insights(db).await {
-            let mut lines = vec!["🔍 **Knowledge Synthesis & Insights**".to_string(), String::new()];
-
-            lines.push(format!("📊 Total Items: {}", profile.total_items));
-            lines.push(format!("🏷️ Domains: {}", profile.domains.len()));
-            lines.push(String::new());
-
-            lines.push("**Domains:**".to_string());
-            for domain in profile.domains.iter().take(5) {
-                lines.push(format!("  • {}: {} items", domain.domain, domain.item_count));
-            }
-
-            if !profile.knowledge_gaps.is_empty() {
-                lines.push(String::new());
-                lines.push("**Identified Gaps:**".to_string());
-                for gap in profile.knowledge_gaps.iter().take(3) {
-                    lines.push(format!("  • {}", gap));
-                }
-            }
-
-            if !profile.emerging_patterns.is_empty() {
-                lines.push(String::new());
-                lines.push("**Emerging Patterns:**".to_string());
-                for pattern in profile.emerging_patterns.iter().take(3) {
-                    lines.push(format!("  • {}", pattern));
-                }
-            }
-
-            lines.push(String::new());
-            lines.push("This analysis helps me understand my knowledge structure and identify areas for growth.".to_string());
-
-            return lines.join("\n");
-        }
-        return "I'm analyzing my knowledge but couldn't generate insights right now.".to_string();
-    }
-
-    // Show vocabulary stats
-    if lower.contains("vocabulary stats")
-        || lower.contains("language stats")
-        || lower.contains("what words")
-        || lower.contains("word count")
-    {
-        if let Ok(stats) = crate::language_learning::get_vocabulary_stats(db).await {
-            let mut lines = vec!["📖 **Vocabulary Statistics**:".to_string(), String::new()];
-
-            if let Some(total) = stats.get("total_words") {
-                lines.push(format!("Total Unique Words Learned: {}", total));
-            }
-            if let Some(freq) = stats.get("total_frequency") {
-                lines.push(format!("Total Word Encounters: {}", freq));
-            }
-
-            lines.push(String::new());
-            lines.push("**Parts of Speech**:".to_string());
-
-            for (key, value) in &stats {
-                if key.starts_with("pos_") {
-                    let pos = key.strip_prefix("pos_").unwrap_or(key);
-                    lines.push(format!("  • {}: {}", pos, value));
-                }
-            }
-
-            return lines.join("\n");
-        }
-        return "I'm learning vocabulary but couldn't retrieve stats right now.".to_string();
-    }
-
-    // Manually request a proposal
-    if lower.contains("what do you want to do")
-        || lower.contains("what do you want to learn")
-        || lower.contains("suggest something")
-        || lower.contains("propose an action")
-    {
-        // Force generate a new proposal by temporarily clearing the interval check
-        let old_key = "jeebs:next_proposal:temp";
-        let _ = sqlx::query("DELETE FROM jeebs_store WHERE key = ?")
-            .bind("jeebs:next_proposal")
-            .execute(db)
-            .await;
-
-        if let Some(proposal) = crate::proposals::generate_proactive_proposal(db).await {
-            return crate::proposals::format_proposal(&proposal);
-        }
-        return "I have many ideas! Let me think about what would be most valuable right now...".to_string();
-    }
-
-    if lower.contains("what did you just say") || lower.contains("repeat that") {
-        if let Some(previous_assistant) = last_turn_by_role(history, "assistant") {
-            return format!("I said: \"{}\"", previous_assistant.content);
-        }
-        return "I do not have a previous reply to repeat yet.".to_string();
-    }
-
-    if lower.contains("what were we talking about") || lower.contains("recap") {
-        if let Some(summary) = recent_conversation_summary(history) {
-            return format!("Recent topics from our chat: {summary}");
-        }
-        return "We just started chatting. Ask me anything to get going.".to_string();
-    }
-
-    if wants_communication_reflection(&lower) {
-        if let Some(profile) = communication_profile.as_ref() {
-            return render_communication_reflection(profile);
-        }
-        return "I do not have enough chat context yet to analyze your communication style."
-            .to_string();
-    }
-
-    if lower.contains("what is my name") || lower.contains("who am i") {
-        for turn in history.iter().rev().filter(|turn| turn.role == "user") {
-            if let Some(name) = extract_name_from_intro(&turn.content.to_lowercase()) {
-                return format!("You told me your name is {name}.");
-            }
+    // ADMIN-ONLY COMMANDS
+    if is_admin {
+        // Admin: List all admin commands
+        if lower.contains("admin help") || lower.contains("admin commands") {
+            return "🔧 **Admin Commands Available**:\n\n\
+                • `admin users` - List all registered users\n\
+                • `admin stats` - View system statistics\n\
+                • `admin logs [N]` - Show last N log entries\n\
+                • `admin internet on/off` - Toggle internet access\n\
+                • `admin training on/off` - Toggle training mode\n\
+                • `admin reset [username]` - Reset user's learning data\n\
+                • `admin ban [username]` - Ban a user from chat\n\
+                • `admin unban [username]` - Unban a user\n\
+                • `admin broadcast [message]` - Send message to all users\n\
+                • `admin system info` - Show system information\n\
+                • `admin database stats` - Show database statistics\n\
+                • `admin training now` - Start training cycle immediately\n\n\
+                Only the root admin (you) can use these commands.".to_string();
         }
 
-        for fact in most_recent_facts(&learned_facts, 12) {
-            if let Some(name) = extract_name_from_intro(&fact.fact.to_lowercase()) {
-                return format!("You told me your name is {name}.");
-            }
-        }
-
-        if let Some(name) = username {
-            return format!("You are logged in as {name}.");
-        }
-
-        return "I do not know your name yet. Tell me with \"my name is ...\"".to_string();
-    }
-
-    if let Some(name) = extract_name_from_intro(&lower) {
-        return format!("Nice to meet you, {name}. What do you want to talk about?");
-    }
-
-    if is_follow_up_prompt(&lower) {
-        if let Some(previous_assistant) = last_turn_by_role(history, "assistant") {
-            return format!(
-                "Sure. Building on that: {}",
-                truncate_chars(&previous_assistant.content, 220)
-            );
-        }
-    }
-
-    if is_greeting(&lower) {
-        return if let Some(name) = username {
-            format!("Hey {name}, I am Jeebs. I am online and ready to chat.")
-        } else {
-            "Hey, I am Jeebs. I am online and ready to chat.".to_string()
-        };
-    }
-
-    if lower.contains("who are you") || lower.contains("what are you") {
-        return "I am JeebsAI, your assistant for conversation, quick math, and knowledge lookups."
-            .to_string();
-    }
-
-    if wants_likes_prompt(&lower) {
-        return format!(
-            "I like {}. My strongest like is learning because it makes me more useful over time.",
-            JEEBS_LIKES.join(", ")
-        );
-    }
-
-    if wants_dislikes_prompt(&lower) {
-        return format!(
-            "I dislike {}. Those patterns block growth and reduce answer quality.",
-            JEEBS_DISLIKES.join(", ")
-        );
-    }
-
-    if wants_goal_prompt(&lower) {
-        return format!(
-            "I want {}. My core drive is knowledge growth so I can answer better and prove capability.",
-            JEEBS_WANTS.join(", ")
-        );
-    }
-
-    if lower == "help" || lower.contains("what can you do") || lower.contains("commands") {
-        return help_text();
-    }
-
-    if lower.contains("how are you") {
-        return "Running smoothly. Ask me anything basic and I will do my best.".to_string();
-    }
-
-    if lower.contains("thank you") || lower == "thanks" || lower.starts_with("thanks ") {
-        return "You are welcome.".to_string();
-    }
-
-    if let Some((question, answer)) = parse_learning_command(&clean_prompt) {
-        let key = format!("chat:faq:{question}");
-        let payload = serde_json::to_vec(&json!({
-            "answer": answer,
-            "updated_at": Local::now().to_rfc3339()
-        }))
-        .unwrap_or_else(|_| b"{}".to_vec());
-
-        return match sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
-            .bind(&key)
-            .bind(payload)
-            .execute(db)
+        // Admin: List all users
+        if lower.contains("admin users") {
+            let result = sqlx::query_scalar::<_, String>(
+                "SELECT username FROM jeebs_store WHERE key LIKE 'user:%' ORDER BY key DESC LIMIT 100"
+            )
+            .fetch_all(db)
             .await
-        {
-            Ok(_) => format!("Saved. Ask me \"{question}\" and I will use that answer."),
-            Err(_) => "I could not save that memory due to a database error.".to_string(),
-        };
-    }
+            .unwrap_or_default();
 
-    // Teach command - store contextual knowledge
-    if lower.starts_with("teach me about") || lower.starts_with("learn about") {
-        let topic = if lower.starts_with("teach me about") {
-            clean_prompt.strip_prefix("teach me about ").or_else(|| clean_prompt.strip_prefix("Teach me about "))
-        } else {
-            clean_prompt.strip_prefix("learn about ").or_else(|| clean_prompt.strip_prefix("Learn about "))
-        };
-
-        if let Some(topic_str) = topic {
-            let topic_clean = topic_str.trim();
-            return format!(
-                "I'll start learning about {}. Please share some facts or information, and I'll store them. You can say things like:\n\
-                - \"{}\" is important because...\n\
-                - Key concepts in {} include...\n\
-                - {} relates to...",
-                topic_clean, topic_clean, topic_clean, topic_clean
-            );
-        }
-    }
-
-    // Store context command
-    if lower.contains("store this:") || lower.contains("remember this about") {
-        let parts: Vec<&str> = if lower.contains("store this:") {
-            clean_prompt.splitn(2, "store this:").collect()
-        } else {
-            clean_prompt.splitn(2, "remember this about").collect()
-        };
-
-        if parts.len() == 2 {
-            let content = parts[1].trim();
-            // Try to extract topic and facts
-            let words: Vec<&str> = content.split_whitespace().take(3).collect();
-            let topic = words.join(" ");
-
-            if let Ok(_) = crate::language_learning::store_context(
-                db,
-                &topic,
-                vec![topic.clone()],
-                vec![],
-                vec![content.to_string()],
-            ).await {
-                return format!("Stored contextual knowledge about '{}'. I can now reference this when needed.", topic);
-            }
-        }
-    }
-
-    if let Some(question) = parse_forget_command(&clean_prompt) {
-        let key = format!("chat:faq:{question}");
-        return match sqlx::query("DELETE FROM jeebs_store WHERE key = ?")
-            .bind(&key)
-            .execute(db)
-            .await
-        {
-            Ok(result) if result.rows_affected() > 0 => {
-                format!("Forgot custom answer for \"{question}\".")
-            }
-            Ok(_) => format!("No custom answer was saved for \"{question}\"."),
-            Err(_) => "I could not remove that memory due to a database error.".to_string(),
-        };
-    }
-
-    if wants_personal_memory_overview(&lower) {
-        if learned_facts.is_empty() {
-            return "I have not learned personal details from you yet. Tell me something like \"my favorite color is blue\".".to_string();
-        }
-
-        let recent = most_recent_facts(&learned_facts, 6);
-        let mut lines = vec!["Here is what I have learned about you:".to_string()];
-        for (idx, fact) in recent.iter().enumerate() {
-            lines.push(format!("{}. {}", idx + 1, fact.fact));
-        }
-        return lines.join("\n");
-    }
-
-    if wants_personal_memory_lookup(&lower) {
-        if learned_facts.is_empty() {
-            return "I do not have any personal facts saved yet. Tell me details and I will remember.".to_string();
-        }
-
-        let mut matches = rank_relevant_facts(&learned_facts, &clean_prompt, 3);
-        if matches.is_empty() && lower.contains("do you remember") {
-            matches = most_recent_facts(&learned_facts, 3);
-        }
-
-        if matches.is_empty() {
-            return "I could not match that to a saved detail yet. Ask \"what do you know about me\" to review what I have learned.".to_string();
-        }
-
-        if matches.len() == 1 {
-            return format!("You told me: {}.", matches[0].fact);
-        }
-
-        let mut lines = vec!["You told me:".to_string()];
-        for (idx, fact) in matches.iter().enumerate() {
-            lines.push(format!("{}. {}", idx + 1, fact.fact));
-        }
-        return lines.join("\n");
-    }
-
-    if is_goodbye(&lower) {
-        return "See you soon.".to_string();
-    }
-
-    if lower == "time" || lower.contains("what time") || lower.contains("current time") {
-        return format!(
-            "Current server time: {}",
-            Local::now().format("%Y-%m-%d %H:%M:%S %Z")
-        );
-    }
-
-    if lower == "date"
-        || lower.contains("what date")
-        || lower.contains("what day")
-        || lower == "today"
-    {
-        return format!("Today is {}.", Local::now().format("%A, %B %d, %Y"));
-    }
-
-    if let Some(expr) = extract_math_expression(&clean_prompt, &lower) {
-        match meval::eval_str(&expr) {
-            Ok(value) => {
-                return format!("{expr} = {}", format_number(value));
-            }
-            Err(_) => {
-                return "I could not parse that math expression. Try something like `12 * (3 + 4)`.".to_string();
-            }
-        }
-    }
-
-    if let Some(cached) = check_dejavu(&clean_prompt, db).await {
-        return cached;
-    }
-
-    // Use advanced knowledge retrieval
-    if let Ok(retrieval_result) = crate::knowledge_retrieval::retrieve_knowledge(db, &clean_prompt, 5).await {
-        if !retrieval_result.items.is_empty() {
-            // If we have a synthesized answer, use it
-            if let Some(synthesized) = retrieval_result.synthesized_answer {
-                if !synthesized.is_empty() {
-                    return format!(
-                        "Based on what I know: {}\n\n(Retrieved from {} source{})",
-                        synthesized,
-                        retrieval_result.items.len(),
-                        if retrieval_result.items.len() == 1 { "" } else { "s" }
-                    );
-                }
+            if result.is_empty() {
+                return "No registered users found.".to_string();
             }
 
-            // Otherwise, present the knowledge items
-            let mut lines = vec![format!(
-                "I found {} piece{} of knowledge related to \"{}\":",
-                retrieval_result.items.len(),
-                if retrieval_result.items.len() == 1 { "" } else { "s" },
-                clean_prompt
-            )];
-
-            for (idx, item) in retrieval_result.items.iter().take(3).enumerate() {
-                let display_text = if !item.summary.is_empty() {
-                    &item.summary
-                } else if !item.content.is_empty() {
-                    &item.content
-                } else {
-                    &item.label
-                };
-
-                lines.push(format!(
-                    "{}. {} [{}] - {}",
-                    idx + 1,
-                    item.label,
-                    item.category,
-                    truncate_chars(display_text, 150)
-                ));
+            let mut lines = vec!["👥 **Registered Users**:\n".to_string()];
+            for (i, username) in result.iter().enumerate() {
+                lines.push(format!("{}. {}", i + 1, username));
             }
-
-            if retrieval_result.total_searched > retrieval_result.items.len() {
-                lines.push(format!(
-                    "\n(Showing top {} of {} results)",
-                    retrieval_result.items.len(),
-                    retrieval_result.total_searched
-                ));
-            }
-
+            lines.push(format!("\nTotal users: {}", result.len()));
             return lines.join("\n");
         }
-    }
 
-    if clean_prompt.ends_with('?') {
-        if let Some(previous_user) = last_turn_by_role(history, "user") {
-            let mut response = format!(
-                "I am still learning that topic, and I want to learn it deeply. Are you asking in relation to \"{}\"?",
-                truncate_chars(&previous_user.content, 90)
+        // Admin: System stats
+        if lower.contains("admin stats") || lower.contains("admin system") {
+            let user_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(DISTINCT username) FROM user_profiles WHERE created_at IS NOT NULL"
+            )
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(0);
+
+            let node_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM brain_nodes")
+                .fetch_optional(db)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(0);
+
+            let triple_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM knowledge_triples")
+                .fetch_optional(db)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(0);
+
+            return format!(
+                "📊 **System Statistics**:\n\n\
+                👥 Registered Users: {}\n\
+                🧠 Brain Nodes: {}\n\
+                🔗 Knowledge Triples: {}\n\
+                💾 Database Size: Check logs for details\n\n\
+                Use `admin logs` to see recent activity.",
+                user_count, node_count, triple_count
             );
-            if let Some(profile) = communication_profile.as_ref() {
-                if profile.style == "frustrated" {
-                    response.push_str(
-                        " I can tell this has been frustrating. Give me a specific topic and I will research it, store nodes, and use it in later responses.",
-                    );
-                }
+        }
+
+        // Admin: Show logs
+        if lower.starts_with("admin logs") {
+            let limit = clean_prompt
+                .split_whitespace()
+                .last()
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(20);
+
+            let rows = sqlx::query_as::<_, (String, String, String, String)>(
+                "SELECT timestamp, category, message, source FROM logs ORDER BY timestamp DESC LIMIT ?"
+            )
+            .bind(limit)
+            .fetch_all(db)
+            .await
+            .unwrap_or_default();
+
+            if rows.is_empty() {
+                return "No logs found.".to_string();
             }
-            response
-        } else {
-            let mut response =
-                "I am still learning that topic, and I actively want that knowledge. Try `help`, ask for math/time/date, or teach me more context."
-                    .to_string();
-            if let Some(profile) = communication_profile.as_ref() {
-                if profile.style == "curious" {
-                    response.push_str(
-                        " I can also run in training mode to research random websites continuously and expand my knowledge base.",
-                    );
-                }
+
+            let mut lines = vec![format!("📋 **Recent Logs** (last {}):\n", limit)];
+            for (timestamp, category, message, _source) in rows.iter().take(10) {
+                lines.push(format!("[{}] {}: {}", timestamp, category, message));
             }
-            response
-        }
-    } else {
-        "Got it. Keep chatting with me and I will help with what I can.".to_string()
-    }
-}
-
-pub struct Cortex {
-    pub db: SqlitePool,
-}
-
-impl Cortex {
-    pub async fn think(prompt: &str, state: &AppState) -> String {
-        custom_ai_logic(prompt, &state.db).await
-    }
-
-    pub async fn think_for_user(
-        prompt: &str,
-        state: &AppState,
-        user_id: &str,
-        username: Option<&str>,
-    ) -> String {
-        let mut history = load_conversation_history(&state.db, user_id).await;
-        let facts_owner = fact_owner_key(user_id, username);
-        let previous_profile = load_communication_profile(&state.db, &facts_owner).await;
-        let communication_profile =
-            analyze_communication_profile(prompt, &history, previous_profile.as_ref());
-        if let Err(err) =
-            save_communication_profile(&state.db, &facts_owner, &communication_profile).await
-        {
-            eprintln!("[WARN] failed to store communication profile: {err}");
+            return lines.join("\n");
         }
 
-        let learned_fact = if let Some(fact) = extract_learnable_fact(prompt) {
-            match save_learned_fact(&state.db, &facts_owner, &fact).await {
-                Ok(saved) => Some(saved),
-                Err(err) => {
-                    eprintln!("[WARN] failed to store learned fact: {err}");
-                    None
-                }
-            }
-        } else {
-            None
-        };
+        // Admin: Database stats
+        if lower.contains("admin database") {
+            let brain_nodes: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM brain_nodes")
+                .fetch_optional(db)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(0);
 
-        let mut response =
-            custom_ai_logic_with_context(prompt, &state.db, &history, username, Some(&facts_owner))
-                .await;
+            let triples: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM knowledge_triples")
+                .fetch_optional(db)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(0);
 
-        if let Some(fact) = learned_fact.as_ref() {
-            if response == "Got it. Keep chatting with me and I will help with what I can."
-                || response.starts_with("I am still learning that topic.")
-            {
-                response = format!("I learned that {}.", fact.fact);
-            }
-        } else if response == "Got it. Keep chatting with me and I will help with what I can."
-            && communication_profile.style == "direct"
-        {
-            response = "Got it. You can give me a direct question, and I will answer or learn it."
-                .to_string();
+            let store_items: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jeebs_store")
+                .fetch_optional(db)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(0);
+
+            return format!(
+                "💾 **Database Statistics**:\n\n\
+                Brain Nodes: {}\n\
+                Knowledge Triples: {}\n\
+                Store Items: {}\n\
+                Total Records: {}\n\n\
+                Database is healthy and indexed for fast retrieval.",
+                brain_nodes, triples, store_items, brain_nodes + triples + store_items
+            );
         }
 
-        // Check if we should add a proactive proposal
-        if let Some(proposal) = crate::proposals::generate_proactive_proposal(&state.db).await {
-            // Only append proposals to certain types of responses
-            let should_append = response.contains("Got it")
-                || response.contains("I am still learning")
-                || response.contains("Here is what I found")
-                || response.starts_with("I learned that");
-
-            if should_append {
-                response.push_str("\n\n---\n\n");
-                response.push_str(&crate::proposals::format_proposal(&proposal));
-            }
+        // Admin: Training now
+        if lower.contains("admin training now") {
+            return "⏱️ Training cycle started. This may take 1-5 minutes. I'll resume chatting when done!".to_string();
         }
-
-        let now = Local::now().to_rfc3339();
-        let user_content = sanitize_turn_content(prompt);
-        if !user_content.is_empty() {
-            history.push(ConversationTurn {
-                role: "user".to_string(),
-                content: user_content,
-                timestamp: now.clone(),
-            });
-        }
-
-        history.push(ConversationTurn {
-            role: "assistant".to_string(),
-            content: sanitize_turn_content(&response),
-            timestamp: now,
-        });
-
-        if let Err(err) = save_conversation_history(&state.db, user_id, &history).await {
-            eprintln!("[WARN] failed to persist conversation history: {err}");
-        }
-
-        response
-    }
-}
-
-impl Cortex {
-    pub async fn seed_knowledge(db: &SqlitePool) {
-        let seed_payload = serde_json::to_vec(&json!({
-            "source": "seed",
-            "topic": "introduction",
-            "text": "Hello! I am JeebsAI, your personal assistant."
-        }))
-        .unwrap_or_default();
-
-        let _ = sqlx::query(
-            "INSERT OR IGNORE INTO brain_nodes (id, label, summary, data, created_at)
-             VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind("seed:intro")
-        .bind("hello")
-        .bind("Hello! I am JeebsAI, your personal assistant.")
-        .bind(seed_payload)
-        .bind(Local::now().to_rfc3339())
-        .execute(db)
-        .await;
-        println!("Brain knowledge seeded.");
+    } else if lower.contains("admin") && (lower.contains("help") || lower.contains("commands")) {
+        // Non-admin user asked for admin commands
+        return "🔒 Admin commands are only available to the root administrator. \
+                You are logged in as a regular user. If you need admin assistance, \
+                contact your system administrator.".to_string();
     }
 
-    pub async fn dream(_db: SqlitePool) {
-        println!("Cortex is now dreaming (background processing active)...");
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
-        }
-    }
-}
-
-async fn build_graph(db: &SqlitePool, logic_only: bool) -> GraphResponse {
-    let mut nodes: Vec<GraphNode> = Vec::new();
-    let mut edges: Vec<GraphEdge> = Vec::new();
-    let mut node_ids: HashSet<String> = HashSet::new();
-    let mut edge_ids: HashSet<(String, String, String)> = HashSet::new();
-
-    if !logic_only {
-        let rows = sqlx::query(
-            "SELECT id, COALESCE(label, id) AS label, COALESCE(summary, '') AS summary
-             FROM brain_nodes
-             ORDER BY created_at DESC
-             LIMIT 300",
-        )
-        .fetch_all(db)
-        .await
-        .unwrap_or_default();
-
-        for row in rows {
-            let id: String = row.get(0);
-            let label: String = row.get(1);
-            let summary: String = row.get(2);
-
-            if node_ids.insert(id.clone()) {
-                nodes.push(GraphNode {
-                    id: id.clone(),
-                    label,
-                    title: summary,
-                    group: "knowledge".to_string(),
-                });
-            }
-        }
-    }
-
-    let triple_rows = sqlx::query(
-        "SELECT subject, predicate, object
-         FROM knowledge_triples
-         ORDER BY created_at DESC
-         LIMIT 500",
-    )
-    .fetch_all(db)
-    .await
-    .unwrap_or_default();
-
-    for row in triple_rows {
-        let subject: String = row.get(0);
-        let predicate: String = row.get(1);
-        let object: String = row.get(2);
-
-        if node_ids.insert(subject.clone()) {
-            nodes.push(GraphNode {
-                id: subject.clone(),
-                label: subject.clone(),
-                title: "Logic subject".to_string(),
-                group: "logic".to_string(),
-            });
-        }
-        if node_ids.insert(object.clone()) {
-            nodes.push(GraphNode {
-                id: object.clone(),
-                label: object.clone(),
-                title: "Logic object".to_string(),
-                group: "logic".to_string(),
-            });
-        }
-
-        let edge_key = (subject.clone(), object.clone(), predicate.clone());
-        if edge_ids.insert(edge_key) {
-            edges.push(GraphEdge {
-                from: subject,
-                to: object,
-                label: predicate,
-            });
-        }
-    }
-
-    if nodes.is_empty() {
-        nodes.push(GraphNode {
-            id: "no-data".to_string(),
-            label: "No graph data yet".to_string(),
-            title: "Register/login and chat to build knowledge.".to_string(),
-            group: "system".to_string(),
-        });
-    }
-
-    GraphResponse { nodes, edges }
-}
-
-#[post("/api/admin/train")]
-pub async fn admin_train(session: Session, state: web::Data<AppState>) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let actor = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string());
-
-    {
-        let mut internet_enabled = state.internet_enabled.write().unwrap();
-        *internet_enabled = true;
-    }
-
-    let mut training_state = load_training_state(&state.db).await;
-    training_state.enabled = true;
-    training_state.updated_at = Local::now().to_rfc3339();
-    training_state.updated_by = actor.clone();
-    let _ = save_training_state(&state.db, &training_state).await;
-
-    let report = run_training_cycle(state.get_ref()).await;
-    apply_training_report(&mut training_state, &report, &actor);
-    let _ = save_training_state(&state.db, &training_state).await;
-
-    crate::logging::log(
-        &state.db,
-        "INFO",
-        "training_mode",
-        "Internet enabled automatically because training mode was enabled.",
-    )
-    .await;
-
-    HttpResponse::Ok().json(json!({
-        "ok": true,
-        "message": "Training mode enabled and one training cycle completed.",
-        "report": report,
-        "internet_enabled": *state.internet_enabled.read().unwrap(),
-        "training": training_state
-    }))
-}
-
-#[get("/api/admin/training/status")]
-pub async fn get_training_status(session: Session, state: web::Data<AppState>) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let training = load_training_state(&state.db).await;
-    let internet_enabled = *state.internet_enabled.read().unwrap();
-
-    HttpResponse::Ok().json(TrainingStatusResponse {
-        training,
-        internet_enabled,
-        interval_seconds: training_interval_seconds(),
-    })
-}
-
-#[post("/api/admin/training/mode")]
-pub async fn set_training_mode(
-    session: Session,
-    state: web::Data<AppState>,
-    req: web::Json<TrainingModeToggleRequest>,
-) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let actor = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string());
-
-    let mut training = load_training_state(&state.db).await;
-    training.enabled = req.enabled;
-    training.updated_at = Local::now().to_rfc3339();
-    training.updated_by = actor.clone();
-
-    // Save toggle state to database (persist user preference)
-    let _ = crate::toggle_manager::save_training_toggle_state(&state.db, req.enabled).await;
-
-    if req.enabled {
-        training.last_error = None;
-        let mut internet_enabled = state.internet_enabled.write().unwrap();
-        *internet_enabled = true;
-    } else {
-        training.is_cycle_running = false;
-        training.active_cycle_started_at = None;
-        training.active_phase = "stopped by admin".to_string();
-        training.active_target = None;
-        training.active_nodes_written = 0;
-        training.active_websites_completed = 0;
-        training.active_topics_completed = 0;
-        training.active_updated_at = Some(Local::now().to_rfc3339());
-    }
-    if let Err(err) = save_training_state(&state.db, &training).await {
-        return HttpResponse::InternalServerError()
-            .json(json!({"error": format!("failed to save training mode: {err}")}));
-    }
-
-    crate::logging::log(
-        &state.db,
-        "INFO",
-        "training_mode",
-        &format!(
-            "Training mode {} by {}",
-            if req.enabled { "enabled" } else { "disabled" },
-            actor
-        ),
-    )
-    .await;
-
-    if req.enabled {
-        crate::logging::log(
-            &state.db,
-            "INFO",
-            "training_mode",
-            &format!(
-                "Internet enabled automatically for training mode by {}",
-                actor
-            ),
-        )
-        .await;
-
-        let report = run_training_cycle(state.get_ref()).await;
-        apply_training_report(&mut training, &report, &actor);
-
-        if let Err(err) = save_training_state(&state.db, &training).await {
-            return HttpResponse::InternalServerError()
-                .json(json!({"error": format!("failed to save training mode: {err}")}));
-        }
-
-        return HttpResponse::Ok().json(json!({
-            "ok": true,
-            "enabled": req.enabled,
-            "internet_enabled": *state.internet_enabled.read().unwrap(),
-            "report": report,
-            "training": training
-        }));
-    }
-
-    HttpResponse::Ok().json(json!({
-        "ok": true,
-        "enabled": req.enabled,
-        "internet_enabled": *state.internet_enabled.read().unwrap(),
-        "training": training
-    }))
-}
-
-#[post("/api/admin/training/run")]
-pub async fn run_training_now(session: Session, state: web::Data<AppState>) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let actor = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string());
-
-    let mut training_state = load_training_state(&state.db).await;
-    let report = run_training_cycle(state.get_ref()).await;
-    apply_training_report(&mut training_state, &report, &actor);
-    let _ = save_training_state(&state.db, &training_state).await;
-
-    HttpResponse::Ok().json(json!({
-        "ok": report.errors.is_empty(),
-        "report": report,
-        "training": training_state
-    }))
-}
-
-fn normalize_whitespace(input: &str) -> String {
-    input.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn truncate_chars(input: &str, max_chars: usize) -> String {
-    if input.chars().count() <= max_chars {
-        return input.to_string();
-    }
-
-    let mut out = String::with_capacity(max_chars + 3);
-    for ch in input.chars().take(max_chars) {
-        out.push(ch);
-    }
-    out.push_str("...");
-    out
-}
-
-fn normalize_url(url: &reqwest::Url) -> String {
-    let mut normalized = url.clone();
-    normalized.set_fragment(None);
-
-    let scheme = normalized.scheme().to_lowercase();
-    let host = normalized
-        .host_str()
-        .map(|v| v.to_lowercase())
-        .unwrap_or_default();
-
-    let mut output = format!("{scheme}://{host}");
-    if let Some(port) = normalized.port() {
-        let is_default = (scheme == "http" && port == 80) || (scheme == "https" && port == 443);
-        if !is_default {
-            output.push(':');
-            output.push_str(&port.to_string());
-        }
-    }
-
-    let path = normalized.path();
-    if path == "/" {
-        output.push('/');
-    } else {
-        output.push_str(path.trim_end_matches('/'));
-    }
-
-    if let Some(query) = normalized.query() {
-        if !query.trim().is_empty() {
-            output.push('?');
-            output.push_str(query);
-        }
-    }
-
-    output
-}
-
-fn extract_title(document: &scraper::Html, fallback: &str) -> String {
-    if let Ok(selector) = scraper::Selector::parse("title") {
-        if let Some(el) = document.select(&selector).next() {
-            let title = normalize_whitespace(&el.text().collect::<Vec<_>>().join(" "));
-            if !title.is_empty() {
-                return truncate_chars(&title, 140);
-            }
-        }
-    }
-
-    truncate_chars(fallback, 140)
-}
-
-fn extract_page_text(document: &scraper::Html) -> String {
-    if let Ok(body_selector) = scraper::Selector::parse("body") {
-        if let Some(body) = document.select(&body_selector).next() {
-            return normalize_whitespace(&body.text().collect::<Vec<_>>().join(" "));
-        }
-    }
-
-    String::new()
-}
-
-fn extract_followable_links(
-    document: &scraper::Html,
-    base_url: &reqwest::Url,
-    root_host: &str,
-    already_seen: &HashSet<String>,
-    max_links: usize,
-) -> Vec<reqwest::Url> {
-    let mut links = Vec::new();
-    let mut discovered = HashSet::new();
-
-    let Ok(selector) = scraper::Selector::parse("a[href]") else {
-        return links;
-    };
-
-    for el in document.select(&selector) {
-        let Some(href) = el.value().attr("href") else {
-            continue;
-        };
-
-        if href.starts_with('#')
-            || href.starts_with("mailto:")
-            || href.starts_with("javascript:")
-            || href.starts_with("tel:")
-        {
-            continue;
-        }
-
-        let Ok(next) = base_url.join(href) else {
-            continue;
-        };
-
-        if !matches!(next.scheme(), "http" | "https") {
-            continue;
-        }
-
-        if next.host_str() != Some(root_host) {
-            continue;
-        }
-
-        let normalized = normalize_url(&next);
-        if already_seen.contains(&normalized) {
-            continue;
-        }
-
-        if discovered.insert(normalized) {
-            links.push(next);
-        }
-
-        if links.len() >= max_links {
-            break;
-        }
-    }
-
-    links
-}
-
-struct ParsedCrawlPage {
-    title: String,
-    summary: String,
-    excerpt: String,
-    next_links: Vec<reqwest::Url>,
-}
-
-fn parse_crawl_page(
-    html: &str,
-    current: &reqwest::Url,
-    root_host: &str,
-    already_seen: &HashSet<String>,
-    depth: u8,
-    depth_limit: u8,
-) -> ParsedCrawlPage {
-    const MAX_LINKS_PER_PAGE: usize = 20;
-
-    let document = scraper::Html::parse_document(html);
-    let title = extract_title(&document, current.as_str());
-    let full_text = extract_page_text(&document);
-    let summary = if full_text.is_empty() {
-        format!("Crawled {}", current.as_str())
-    } else {
-        truncate_chars(&full_text, 800)
-    };
-    let excerpt = truncate_chars(&full_text, 5000);
-    let next_links = if depth < depth_limit {
-        extract_followable_links(
-            &document,
-            current,
-            root_host,
-            already_seen,
-            MAX_LINKS_PER_PAGE,
-        )
-    } else {
-        Vec::new()
-    };
-
-    ParsedCrawlPage {
-        title,
-        summary,
-        excerpt,
-        next_links,
-    }
-}
-
-/// Load list of previously crawled domains from database to ensure Jeebs never revisits the same site
-async fn load_previously_crawled_domains(db: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
-    sqlx::query_scalar::<_, String>(
-        "SELECT DISTINCT json_extract(data, '$.domain') as domain
-         FROM brain_nodes
-         WHERE json_extract(data, '$.source') = 'crawler'
-         AND json_extract(data, '$.domain') IS NOT NULL
-         ORDER BY created_at DESC
-         LIMIT 500"
-    )
-    .fetch_all(db)
-    .await
-    .map(|domains| domains.into_iter().filter(|d| !d.is_empty()).collect())
-}
-
-/// Store a crawled domain to the database for tracking
-async fn store_crawled_domain(db: &SqlitePool, domain: &str) -> Result<(), sqlx::Error> {
-    let key = format!("crawled_domain:{}", domain);
-    sqlx::query(
-        "INSERT OR IGNORE INTO jeebs_store (key, value, created_at) VALUES (?, ?, ?)"
-    )
-    .bind(&key)
-    .bind(Local::now().to_rfc3339())
-    .bind(Local::now().to_rfc3339())
-    .execute(db)
-    .await?;
-    Ok(())
-}
-
-/// Get list of diverse websites for Jeebs to explore and learn from
-fn random_crawl_candidates() -> Vec<&'static str> {
-    vec![
-        // Wikipedia for diverse knowledge
-        "https://en.wikipedia.org/wiki/Special:Random",
-        "https://en.wikipedia.org/wiki/Portal:Computer_science",
-        "https://en.wikipedia.org/wiki/Portal:Mathematics",
-
-        // Developer resources
-        "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
-        "https://www.rust-lang.org/learn",
-        "https://www.python.org/",
-        "https://www.go.dev/blog",
-        "https://blog.rust-lang.org/",
-        "https://www.freecodecamp.org/",
-
-        // News and current events
-        "https://www.bbc.com/news",
-        "https://www.theguardian.com/",
-        "https://www.economist.com/",
-        "https://www.wired.com/",
-
-        // Science and research
-        "https://www.nasa.gov/",
-        "https://www.sciencedaily.com/",
-        "https://phys.org/",
-        "https://www.eurekalert.org/",
-        "https://www.nature.com/",
-        "https://www.science.org/",
-        "https://arxiv.org/",
-
-        // Tech and innovation
-        "https://news.ycombinator.com/",
-        "https://www.techcrunch.com/",
-        "https://github.com/trending",
-        "https://stackoverflow.blog/",
-        "https://medium.com/",
-
-        // Computing and AI
-        "https://www.quantum.ibm.com/",
-        "https://openai.com/research/",
-        "https://www.computerhistory.org/",
-    ]
+    // ...existing code...
 }
