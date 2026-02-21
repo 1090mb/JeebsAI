@@ -3209,527 +3209,76 @@ fn parse_crawl_page(
     }
 }
 
-async fn crawl_and_store(
-    state: &AppState,
-    start_url: &str,
-    depth_limit: u8,
-) -> Result<CrawlSummary, String> {
-    const MAX_PAGES: usize = 25;
-
-    let start = reqwest::Url::parse(start_url).map_err(|e| format!("Invalid URL: {e}"))?;
-    if !matches!(start.scheme(), "http" | "https") {
-        return Err("Only http and https URLs are supported".to_string());
-    }
-
-    let root_host = start
-        .host_str()
-        .map(|h| h.to_string())
-        .ok_or_else(|| "URL must include a host".to_string())?;
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(12))
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .user_agent("JeebsAI-Crawler/1.0")
-        .build()
-        .map_err(|e| format!("Crawler initialization failed: {e}"))?;
-
-    let mut queue: VecDeque<(reqwest::Url, u8)> = VecDeque::new();
-    queue.push_back((start.clone(), 0));
-
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut pages_stored = 0usize;
-    let mut links_followed = 0usize;
-    let mut stored_nodes: Vec<NodeWritePreview> = Vec::new();
-
-    while let Some((current, depth)) = queue.pop_front() {
-        if visited.len() >= MAX_PAGES {
-            break;
-        }
-
-        let normalized_current = normalize_url(&current);
-        if !visited.insert(normalized_current.clone()) {
-            continue;
-        }
-
-        let response = match client.get(current.clone()).send().await {
-            Ok(resp) => resp,
-            Err(_) => continue,
-        };
-
-        if !response.status().is_success() {
-            continue;
-        }
-
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        if !content_type.contains("text/html") {
-            continue;
-        }
-
-        let html = match response.text().await {
-            Ok(body) => body,
-            Err(_) => continue,
-        };
-
-        let parsed = parse_crawl_page(&html, &current, &root_host, &visited, depth, depth_limit);
-
-        let node_id = format!(
-            "crawl:{}",
-            blake3::hash(normalized_current.as_bytes()).to_hex()
-        );
-        let payload = serde_json::to_vec(&json!({
-            "source": "crawler",
-            "url": current.as_str(),
-            "normalized_url": normalized_current,
-            "title": parsed.title,
-            "excerpt": parsed.excerpt,
-            "crawled_at": Local::now().to_rfc3339(),
-            "depth": depth
-        }))
-        .unwrap_or_else(|_| b"{}".to_vec());
-
-        if sqlx::query(
-            "INSERT OR REPLACE INTO brain_nodes (id, label, summary, data, created_at)
-             VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(&node_id)
-        .bind(&parsed.title)
-        .bind(&parsed.summary)
-        .bind(payload)
-        .bind(Local::now().to_rfc3339())
-        .execute(&state.db)
-        .await
-        .is_ok()
-        {
-            pages_stored += 1;
-            stored_nodes.push(NodeWritePreview {
-                node_id: node_id.clone(),
-                label: parsed.title.clone(),
-                summary: parsed.summary.clone(),
-                source_url: current.as_str().to_string(),
-            });
-            if stored_nodes.len() > 16 {
-                stored_nodes.remove(0);
-            }
-
-            let subject = truncate_chars(&parsed.title, 120);
-            let object = truncate_chars(current.as_str(), 300);
-            let _ = sqlx::query(
-                "INSERT OR REPLACE INTO knowledge_triples (subject, predicate, object, confidence, created_at)
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(subject)
-            .bind("source_url")
-            .bind(object)
-            .bind(0.9_f64)
-            .bind(Local::now().to_rfc3339())
-            .execute(&state.db)
-            .await;
-        }
-
-        if !parsed.next_links.is_empty() {
-            links_followed += parsed.next_links.len();
-            for link in parsed.next_links {
-                queue.push_back((link, depth + 1));
-            }
-        }
-    }
-
-    Ok(CrawlSummary {
-        start_url: normalize_url(&start),
-        max_depth: depth_limit,
-        pages_visited: visited.len(),
-        pages_stored,
-        links_followed,
-        stored_nodes,
-    })
+/// Load list of previously crawled domains from database to ensure Jeebs never revisits the same site
+async fn load_previously_crawled_domains(db: &SqlitePool) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT json_extract(data, '$.domain') as domain
+         FROM brain_nodes
+         WHERE json_extract(data, '$.source') = 'crawler'
+         AND json_extract(data, '$.domain') IS NOT NULL
+         ORDER BY created_at DESC
+         LIMIT 500"
+    )
+    .fetch_all(db)
+    .await
+    .map(|domains| domains.into_iter().filter(|d| !d.is_empty()).collect())
 }
 
+/// Store a crawled domain to the database for tracking
+async fn store_crawled_domain(db: &SqlitePool, domain: &str) -> Result<(), sqlx::Error> {
+    let key = format!("crawled_domain:{}", domain);
+    sqlx::query(
+        "INSERT OR IGNORE INTO jeebs_store (key, value, created_at) VALUES (?, ?, ?)"
+    )
+    .bind(&key)
+    .bind(Local::now().to_rfc3339())
+    .bind(Local::now().to_rfc3339())
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Get list of diverse websites for Jeebs to explore and learn from
 fn random_crawl_candidates() -> Vec<&'static str> {
     vec![
+        // Wikipedia for diverse knowledge
         "https://en.wikipedia.org/wiki/Special:Random",
+        "https://en.wikipedia.org/wiki/Portal:Computer_science",
+        "https://en.wikipedia.org/wiki/Portal:Mathematics",
+
+        // Developer resources
         "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
         "https://www.rust-lang.org/learn",
+        "https://www.python.org/",
+        "https://www.go.dev/blog",
+        "https://blog.rust-lang.org/",
+        "https://www.freecodecamp.org/",
+
+        // News and current events
         "https://www.bbc.com/news",
+        "https://www.theguardian.com/",
+        "https://www.economist.com/",
+        "https://www.wired.com/",
+
+        // Science and research
         "https://www.nasa.gov/",
-        "https://news.ycombinator.com/",
         "https://www.sciencedaily.com/",
+        "https://phys.org/",
+        "https://www.eurekalert.org/",
+        "https://www.nature.com/",
+        "https://www.science.org/",
+        "https://arxiv.org/",
+
+        // Tech and innovation
+        "https://news.ycombinator.com/",
+        "https://www.techcrunch.com/",
+        "https://github.com/trending",
         "https://stackoverflow.blog/",
+        "https://medium.com/",
+
+        // Computing and AI
+        "https://www.quantum.ibm.com/",
+        "https://openai.com/research/",
+        "https://www.computerhistory.org/",
     ]
-}
-
-#[post("/api/admin/crawl")]
-pub async fn admin_crawl(
-    session: Session,
-    state: web::Data<AppState>,
-    req: web::Json<CrawlRequest>,
-) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let url = req.url.trim();
-    if url.is_empty() {
-        return HttpResponse::BadRequest().json(json!({"error": "URL is required"}));
-    }
-
-    let depth = req.depth.unwrap_or(1).clamp(1, 3);
-
-    crate::logging::log(
-        &state.db,
-        "INFO",
-        "crawler",
-        &format!("Admin crawl requested for {url} (depth={depth})"),
-    )
-    .await;
-
-    match crawl_and_store(state.get_ref(), url, depth).await {
-        Ok(summary) => HttpResponse::Ok().json(json!({
-            "ok": true,
-            "message": format!(
-                "Crawl complete. Visited {} page(s), stored {} node(s), discovered {} link(s).",
-                summary.pages_visited, summary.pages_stored, summary.links_followed
-            ),
-            "start_url": summary.start_url,
-            "max_depth": summary.max_depth,
-            "pages_visited": summary.pages_visited,
-            "pages_stored": summary.pages_stored,
-            "links_followed": summary.links_followed,
-            "stored_nodes": summary.stored_nodes
-        })),
-        Err(err) => HttpResponse::BadRequest().json(json!({
-            "ok": false,
-            "error": err
-        })),
-    }
-}
-
-#[post("/api/admin/crawl/random")]
-pub async fn admin_crawl_random(
-    session: Session,
-    state: web::Data<AppState>,
-    query: web::Query<RandomCrawlQuery>,
-) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let depth = query.depth.unwrap_or(1).clamp(1, 3);
-    let mut rng = rand::thread_rng();
-    let mut candidates = random_crawl_candidates();
-    candidates.shuffle(&mut rng);
-
-    crate::logging::log(
-        &state.db,
-        "INFO",
-        "crawler",
-        &format!(
-            "Admin requested random crawl (depth={depth}, candidates={})",
-            candidates.len()
-        ),
-    )
-    .await;
-
-    let mut attempts = Vec::new();
-    for candidate in candidates {
-        match crawl_and_store(state.get_ref(), candidate, depth).await {
-            Ok(summary) => {
-                return HttpResponse::Ok().json(json!({
-                    "ok": true,
-                    "random": true,
-                    "selected_url": summary.start_url,
-                    "message": format!(
-                        "Random crawl complete from {}. Visited {} page(s), stored {} node(s), discovered {} link(s).",
-                        summary.start_url, summary.pages_visited, summary.pages_stored, summary.links_followed
-                    ),
-                    "max_depth": summary.max_depth,
-                    "pages_visited": summary.pages_visited,
-                    "pages_stored": summary.pages_stored,
-                    "links_followed": summary.links_followed,
-                    "stored_nodes": summary.stored_nodes,
-                    "attempts": attempts
-                }));
-            }
-            Err(err) => {
-                attempts.push(json!({
-                    "url": candidate,
-                    "error": err
-                }));
-            }
-        }
-    }
-
-    HttpResponse::BadGateway().json(json!({
-        "ok": false,
-        "error": "Random crawl failed for all candidate websites.",
-        "attempts": attempts
-    }))
-}
-
-#[post("/api/brain/search")]
-pub async fn search_brain(
-    state: web::Data<AppState>,
-    req: web::Json<SearchRequest>,
-) -> impl Responder {
-    let query = req.query.trim().to_string();
-
-    let rows = if query.is_empty() {
-        sqlx::query(
-            "SELECT id, COALESCE(label, id) AS label, COALESCE(summary, '') AS summary
-             FROM brain_nodes
-             ORDER BY created_at DESC
-             LIMIT 50",
-        )
-        .fetch_all(&state.db)
-        .await
-    } else {
-        let pattern = format!("%{query}%");
-        sqlx::query(
-            "SELECT id, COALESCE(label, id) AS label, COALESCE(summary, '') AS summary
-             FROM brain_nodes
-             WHERE id LIKE ? OR label LIKE ? OR summary LIKE ?
-             ORDER BY created_at DESC
-             LIMIT 50",
-        )
-        .bind(&pattern)
-        .bind(&pattern)
-        .bind(&pattern)
-        .fetch_all(&state.db)
-        .await
-    };
-
-    let results = rows
-        .unwrap_or_default()
-        .into_iter()
-        .map(|row| BrainSearchResult {
-            id: row.get(0),
-            label: row.get(1),
-            summary: row.get(2),
-            sources: Vec::new(),
-        })
-        .collect::<Vec<_>>();
-
-    HttpResponse::Ok().json(results)
-}
-
-#[post("/api/knowledge/search")]
-pub async fn knowledge_search(
-    data: web::Data<AppState>,
-    req: web::Json<AdvancedSearchRequest>,
-) -> impl Responder {
-    let max_results = req.max_results.unwrap_or(10).min(50);
-
-    match crate::knowledge_retrieval::retrieve_knowledge(&data.db, &req.query, max_results).await {
-        Ok(result) => HttpResponse::Ok().json(json!({
-            "items": result.items,
-            "total_searched": result.total_searched,
-            "query_terms": result.query_terms,
-            "synthesized_answer": result.synthesized_answer,
-        })),
-        Err(e) => HttpResponse::InternalServerError().json(json!({
-            "error": format!("Knowledge search failed: {}", e)
-        })),
-    }
-}
-
-#[get("/api/knowledge/stats")]
-pub async fn knowledge_stats(data: web::Data<AppState>) -> impl Responder {
-    match crate::knowledge_retrieval::get_knowledge_stats(&data.db).await {
-        Ok(stats) => HttpResponse::Ok().json(stats),
-        Err(e) => HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to get stats: {}", e)
-        })),
-    }
-}
-
-#[get("/api/language/stats")]
-pub async fn language_stats(data: web::Data<AppState>) -> impl Responder {
-    match crate::language_learning::get_vocabulary_stats(&data.db).await {
-        Ok(stats) => HttpResponse::Ok().json(stats),
-        Err(e) => HttpResponse::InternalServerError().json(json!({
-            "error": format!("Failed to get stats: {}", e)
-        })),
-    }
-}
-
-#[post("/api/admin/training")]
-pub async fn admin_training(session: Session, state: web::Data<AppState>) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let actor = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string());
-
-    {
-        let mut internet_enabled = state.internet_enabled.write().unwrap();
-        *internet_enabled = true;
-    }
-
-    let mut training_state = load_training_state(&state.db).await;
-    training_state.enabled = true;
-    training_state.updated_at = Local::now().to_rfc3339();
-    training_state.updated_by = actor.clone();
-    let _ = save_training_state(&state.db, &training_state).await;
-
-    let report = run_training_cycle(state.get_ref()).await;
-    apply_training_report(&mut training_state, &report, &actor);
-    let _ = save_training_state(&state.db, &training_state).await;
-
-    crate::logging::log(
-        &state.db,
-        "INFO",
-        "training_mode",
-        "Internet enabled automatically because training mode was enabled.",
-    )
-    .await;
-
-    HttpResponse::Ok().json(json!({
-        "ok": true,
-        "message": "Training mode enabled and one training cycle completed.",
-        "report": report,
-        "internet_enabled": *state.internet_enabled.read().unwrap(),
-        "training": training_state
-    }))
-}
-
-#[get("/api/admin/training/status")]
-pub async fn get_admin_training_status(session: Session, state: web::Data<AppState>) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let training = load_training_state(&state.db).await;
-    let internet_enabled = *state.internet_enabled.read().unwrap();
-
-    HttpResponse::Ok().json(TrainingStatusResponse {
-        training,
-        internet_enabled,
-        interval_seconds: training_interval_seconds(),
-    })
-}
-
-#[post("/api/admin/training/mode")]
-pub async fn set_admin_training_mode(
-    session: Session,
-    state: web::Data<AppState>,
-    req: web::Json<TrainingModeToggleRequest>,
-) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let actor = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string());
-
-    let mut training = load_training_state(&state.db).await;
-    training.enabled = req.enabled;
-    training.updated_at = Local::now().to_rfc3339();
-    training.updated_by = actor.clone();
-    if req.enabled {
-        training.last_error = None;
-        let mut internet_enabled = state.internet_enabled.write().unwrap();
-        *internet_enabled = true;
-    } else {
-        training.is_cycle_running = false;
-        training.active_cycle_started_at = None;
-        training.active_phase = "stopped by admin".to_string();
-        training.active_target = None;
-        training.active_nodes_written = 0;
-        training.active_websites_completed = 0;
-        training.active_topics_completed = 0;
-        training.active_updated_at = Some(Local::now().to_rfc3339());
-    }
-    if let Err(err) = save_training_state(&state.db, &training).await {
-        return HttpResponse::InternalServerError()
-            .json(json!({"error": format!("failed to save training mode: {err}")}));
-    }
-
-    crate::logging::log(
-        &state.db,
-        "INFO",
-        "training_mode",
-        &format!(
-            "Training mode {} by {}",
-            if req.enabled { "enabled" } else { "disabled" },
-            actor
-        ),
-    )
-    .await;
-
-    if req.enabled {
-        crate::logging::log(
-            &state.db,
-            "INFO",
-            "training_mode",
-            &format!(
-                "Internet enabled automatically for training mode by {}",
-                actor
-            ),
-        )
-        .await;
-
-        let report = run_training_cycle(state.get_ref()).await;
-        apply_training_report(&mut training, &report, &actor);
-
-        if let Err(err) = save_training_state(&state.db, &training).await {
-            return HttpResponse::InternalServerError()
-                .json(json!({"error": format!("failed to save training mode: {err}")}));
-        }
-
-        return HttpResponse::Ok().json(json!({
-            "ok": true,
-            "enabled": req.enabled,
-            "internet_enabled": *state.internet_enabled.read().unwrap(),
-            "report": report,
-            "training": training
-        }));
-    }
-
-    HttpResponse::Ok().json(json!({
-        "ok": true,
-        "enabled": req.enabled,
-        "internet_enabled": *state.internet_enabled.read().unwrap(),
-        "training": training
-    }))
-}
-
-#[post("/api/admin/training/run")]
-pub async fn run_admin_training_now(session: Session, state: web::Data<AppState>) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
-        return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
-    }
-
-    let actor = session
-        .get::<String>("username")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string());
-
-    let mut training_state = load_training_state(&state.db).await;
-    let report = run_training_cycle(state.get_ref()).await;
-    apply_training_report(&mut training_state, &report, &actor);
-    let _ = save_training_state(&state.db, &training_state).await;
-
-    HttpResponse::Ok().json(json!({
-        "ok": report.errors.is_empty(),
-        "report": report,
-        "training": training_state
-    }))
 }
