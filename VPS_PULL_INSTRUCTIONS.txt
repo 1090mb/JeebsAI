@@ -1,0 +1,109 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║           📥 HOW TO PULL REPO TO YOUR VPS 📥               ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+STEP 1 - SSH TO YOUR VPS:
+═══════════════════════════════════════════════════════════════
+
+ssh your-username@your-vps-ip
+
+(Replace with your actual username and IP address)
+
+
+STEP 2 - NAVIGATE TO JEEBS DIRECTORY:
+═══════════════════════════════════════════════════════════════
+
+cd ~/JeebsAI
+
+(Or wherever you installed JeebsAI - common locations:
+ • ~/JeebsAI
+ • /opt/JeebsAI
+ • /home/yourusername/JeebsAI)
+
+
+STEP 3 - PULL LATEST CHANGES:
+═══════════════════════════════════════════════════════════════
+
+OPTION A - Use the automated script (RECOMMENDED):
+
+    bash pull_from_github.sh
+
+This will:
+  ✅ Pull latest code
+  ✅ Auto-detect systemd or Docker
+  ✅ Ask if you want to restart Jeebs
+  ✅ Handle everything for you
+
+
+OPTION B - Manual git pull:
+
+    git pull origin main
+
+Then restart Jeebs manually:
+  • For systemd: sudo systemctl restart jeebs
+  • For Docker: docker-compose restart
+
+
+═══════════════════════════════════════════════════════════════
+COMPLETE EXAMPLE (Copy-paste these commands):
+═══════════════════════════════════════════════════════════════
+
+ssh your-username@your-vps-ip
+cd ~/JeebsAI
+bash pull_from_github.sh
+
+
+═══════════════════════════════════════════════════════════════
+IF pull_from_github.sh DOESN'T EXIST YET:
+═══════════════════════════════════════════════════════════════
+
+First pull manually, then use the script:
+
+ssh your-username@your-vps-ip
+cd ~/JeebsAI
+git pull origin main
+chmod +x pull_from_github.sh
+bash pull_from_github.sh
+
+
+═══════════════════════════════════════════════════════════════
+TROUBLESHOOTING:
+═══════════════════════════════════════════════════════════════
+
+❌ "Permission denied" when pulling:
+   Make sure your VPS has SSH keys set up with GitHub
+   Or use HTTPS: git remote set-url origin https://github.com/yourusername/JeebsAI.git
+
+❌ "Local changes would be overwritten":
+   Stash your changes: git stash
+   Then pull: git pull origin main
+
+❌ Can't find JeebsAI directory:
+   Find it: find ~ -name "JeebsAI" -type d
+   Or: ls -la ~/
+   Or: ls -la /opt/
+
+❌ Jeebs won't restart:
+   Check status: systemctl status jeebs
+   View logs: journalctl -u jeebs -n 50
+   Or for Docker: docker-compose logs --tail=50
+
+
+═══════════════════════════════════════════════════════════════
+AFTER PULLING:
+═══════════════════════════════════════════════════════════════
+
+Access your new Topic Learning feature at:
+    http://your-vps-ip/webui/admin_dashboard.html
+
+Look for the orange "🎓 Topic Learning" section!
+
+
+═══════════════════════════════════════════════════════════════
+
+✅ QUICK COMMAND: ssh your-vps && cd ~/JeebsAI && bash pull_from_github.sh
+
+═══════════════════════════════════════════════════════════════

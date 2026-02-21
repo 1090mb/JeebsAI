@@ -47,11 +47,12 @@ fi
 CURRENT_BRANCH=$(git branch --show-current)
 info "Current branch: $CURRENT_BRANCH"
 
-# Stash any local changes
-if ! git diff-index --quiet HEAD --; then
+# Stash any local changes (including Cargo.lock and other build artifacts)
+if ! git diff-index --quiet HEAD -- || ! git diff --quiet; then
     warn "Local changes detected - stashing them"
     git stash save "Auto-stash before pull $(date +%Y%m%d_%H%M%S)"
     STASHED=true
+    info "Local changes stashed successfully"
 else
     STASHED=false
     info "No local changes to stash"
