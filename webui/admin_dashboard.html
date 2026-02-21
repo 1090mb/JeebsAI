@@ -729,35 +729,48 @@
                         method: "POST",
                         headers: authHeaders(true),
                         body: JSON.stringify({
-                            message: `Please research and learn everything you can about ${topic}. Search the web and store the knowledge in your brain.`,
+                            prompt: `Please research and learn everything you can about ${topic}. Search the web and store the knowledge in your brain.`,
                         }),
                     });
 
                     if (!res.ok) {
-                        const err = await parseErrorMessage(
-                            res,
-                            "Failed to initiate learning",
-                        );
-                        statusEl.innerText = `❌ Error: ${err}`;
+                        // Try to get detailed error message
+                        let errorMsg = "Failed to initiate learning";
+                        try {
+                            const errorData = await res.json();
+                            errorMsg = errorData.error || errorData.message || errorMsg;
+                        } catch {
+                            // If JSON parsing fails, try text
+                            try {
+                                errorMsg = await res.text() || errorMsg;
+                            } catch {}
+                        }
+                        statusEl.innerText = `❌ Error (${res.status}): ${errorMsg}`;
                         statusEl.style.color = "#ff6b6b";
                         return;
                     }
 
                     const data = await res.json();
-                    statusEl.innerText = `✅ Learning initiated! Jeebs is researching "${topic}". Check the response for details.`;
-                    statusEl.style.color = "#8bc34a";
 
-                    // Clear the input after successful submission
-                    document.getElementById("topicInput").value = "";
-
-                    // Show Jeebs' response in a more visible way
                     if (data.response) {
+                        statusEl.innerText = `✅ Learning initiated! Jeebs is researching "${topic}".`;
+                        statusEl.style.color = "#8bc34a";
+
+                        // Clear the input after successful submission
+                        document.getElementById("topicInput").value = "";
+
+                        // Show Jeebs' response in a more visible way
                         setTimeout(() => {
                             statusEl.innerHTML = `✅ Completed!<br><small style="color: #aaa; display: block; margin-top: 8px; max-width: 600px; margin-left: auto; margin-right: auto; text-align: left;">${data.response.substring(0, 200)}${data.response.length > 200 ? "..." : ""}</small>`;
                         }, 1000);
+                    } else {
+                        statusEl.innerText = `⚠️ Request sent but no response received`;
+                        statusEl.style.color = "#ffa500";
                     }
                 } catch (error) {
                     statusEl.innerText = `❌ Request failed: ${error.message}`;
+                    statusEl.style.color = "#ff6b6b";
+                }
                     statusEl.style.color = "#ff6b6b";
                 }
             }

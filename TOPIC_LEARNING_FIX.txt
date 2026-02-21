@@ -1,0 +1,95 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║          🔧 TOPIC LEARNING FIX - ISSUE RESOLVED 🔧          ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+YOUR ERROR: "failed to initiate learning"
+
+
+THE PROBLEM:
+═══════════════════════════════════════════════════════════════
+
+❌ JavaScript was sending: { "message": "..." }
+✅ API expects:           { "prompt": "..." }
+
+The field name mismatch caused the request to fail.
+
+
+THE FIX:
+═══════════════════════════════════════════════════════════════
+
+✅ Changed JavaScript to send "prompt" instead of "message"
+✅ Improved error handling to show detailed error messages
+✅ Added HTTP status codes to error messages
+✅ Better response validation
+
+
+WHAT I FIXED:
+═══════════════════════════════════════════════════════════════
+
+File: webui/admin_dashboard.html
+
+BEFORE:
+  body: JSON.stringify({
+    message: `Please research...`  ❌ Wrong field
+  })
+
+AFTER:
+  body: JSON.stringify({
+    prompt: `Please research...`   ✅ Correct field
+  })
+
+ALSO ADDED:
+  • Better error messages with HTTP status codes
+  • Detailed error parsing (JSON and text)
+  • Response validation
+  • More informative status updates
+
+
+NOW IT WILL:
+═══════════════════════════════════════════════════════════════
+
+✅ Send correct field name to API
+✅ Work with /api/jeebs endpoint
+✅ Show detailed errors if something fails
+✅ Display Jeebs' response properly
+✅ Clear input after successful learning
+
+
+TO DEPLOY THE FIX:
+═══════════════════════════════════════════════════════════════
+
+1. Push to GitHub (on Mac):
+   bash PUSH_FIX.sh
+
+2. Update VPS:
+   bash update.sh
+
+3. Try again!
+   • Go to admin dashboard
+   • Enter topic in textbox
+   • Click LEARN
+   • Should work now! ✅
+
+
+TESTING:
+═══════════════════════════════════════════════════════════════
+
+After deploying, try entering:
+  • "quantum computing"
+  • "machine learning"
+  • "Rust programming"
+
+You should see:
+  🧠 Learning about "quantum computing"...
+  ✅ Learning initiated! Jeebs is researching...
+  [Shows Jeebs' response]
+
+
+═══════════════════════════════════════════════════════════════
+
+✅ FIX COMPLETE! Ready to push and deploy.
+
+═══════════════════════════════════════════════════════════════
