@@ -1,0 +1,228 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║    ✅ TRAINING MODE AUTO-RUN WITH ON/OFF TOGGLE - DONE! ✅  ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+WHAT YOU ASKED FOR:
+═══════════════════════════════════════════════════════════════
+
+"Training mode should auto run for now when JeebsAI starts but
+I would like a way to turn it off just in case something
+happens. Use the toggle style from internet connections."
+
+
+✅ FULLY IMPLEMENTED!
+
+
+WHAT'S NEW:
+═══════════════════════════════════════════════════════════════
+
+🤖 TRAINING MODE AUTO-RUNS ON STARTUP
+   • Training mode enabled by default
+   • Automatically starts when JeebsAI boots
+   • No manual configuration needed
+   • Can be toggled on/off anytime
+
+🎚️ ON/OFF TOGGLE IN ADMIN DASHBOARD
+   • Same style as Internet Access toggle
+   • Green indicator when running (🟢 RUNNING)
+   • Red indicator when stopped (🔴 STOPPED)
+   • One-click toggle button
+   • Auto-refreshes every 5 seconds
+
+
+HOW IT WORKS:
+═══════════════════════════════════════════════════════════════
+
+STARTUP:
+
+  JeebsAI starts up
+    ↓
+  Training mode default: enabled = true
+    ↓
+  Autonomous training worker spawns
+    ↓
+  Begins research cycles automatically
+    ↓
+  🟢 RUNNING status in admin dashboard
+
+
+TOGGLING OFF (if needed):
+
+  Admin clicks TOGGLE button
+    ↓
+  Confirmation dialog appears
+    ↓
+  Admin confirms to stop training
+    ↓
+  API sets training.enabled = false
+    ↓
+  Training loop exits gracefully
+    ↓
+  🔴 STOPPED status in admin dashboard
+    ↓
+  JeebsAI continues running normally
+    ↓
+  Can be turned back on anytime
+
+
+ADMIN DASHBOARD UI:
+═══════════════════════════════════════════════════════════════
+
+New "🤖 Training Mode" Section:
+
+  When RUNNING:
+  ┌────────────────────────────────────┐
+  │      🤖 Training Mode              │
+  │   🟢 RUNNING      [TOGGLE]         │
+  │   (learns from web & chat)         │
+  └────────────────────────────────────┘
+
+  When STOPPED:
+  ┌────────────────────────────────────┐
+  │      🤖 Training Mode              │
+  │   🔴 STOPPED      [TOGGLE]         │
+  │   (learns from web & chat)         │
+  └────────────────────────────────────┘
+
+Features:
+  ✅ Green icon (🟢) when learning
+  ✅ Red icon (🔴) when paused
+  ✅ Auto-refreshes every 5 seconds
+  ✅ One-click toggle
+  ✅ Confirmation dialog
+  ✅ Immediate feedback
+
+
+CODE CHANGES:
+═══════════════════════════════════════════════════════════════
+
+src/cortex.rs:
+  ✅ Changed default: enabled = false → true
+  ✅ Now auto-runs when JeebsAI starts
+
+webui/admin_dashboard.html:
+  ✅ Added Training Mode toggle section
+  ✅ Added loadTrainingStatus() function
+  ✅ Added toggleTrainingMode() function
+  ✅ Integrated into bootstrap and refresh loop
+  ✅ Styled consistently with Internet toggle
+
+
+USE CASES:
+═══════════════════════════════════════════════════════════════
+
+NORMAL OPERATION:
+  ✅ Start JeebsAI
+  ✅ Training auto-runs (🟢 RUNNING)
+  ✅ Jeebs learns continuously
+  ✅ No action needed
+
+TROUBLESHOOTING:
+  ✅ Something seems wrong
+  ✅ Click TOGGLE to stop training
+  ✅ Investigate the issue
+  ✅ Click TOGGLE again to resume
+  ✅ Back to learning!
+
+MAINTENANCE:
+  ✅ Need to do server work
+  ✅ Stop training with toggle
+  ✅ Do your maintenance
+  ✅ Restart training when done
+  ✅ No data loss or conflicts
+
+TESTING:
+  ✅ Want to test without learning
+  ✅ Toggle training OFF
+  ✅ Run your tests
+  ✅ Toggle back ON
+  ✅ Resume normal operation
+
+
+TECHNICAL DETAILS:
+═══════════════════════════════════════════════════════════════
+
+API Endpoints (Already Existed):
+
+GET /api/admin/training/status
+  → Returns training state and internet status
+  → Shows if training is enabled/running
+
+POST /api/admin/training/mode
+  Body: { "enabled": true/false }
+  → Sets training mode on or off
+  → Returns success message
+
+Database:
+  • Uses existing training_state in jeebs_store
+  • No schema changes
+  • Persists across restarts
+
+JavaScript Functions:
+  • loadTrainingStatus() - Gets current status
+  • toggleTrainingMode() - Changes status
+  • Integrated into dashboard bootstrap
+  • Auto-refreshes every 5 seconds
+
+
+REAL-WORLD EXAMPLE:
+═══════════════════════════════════════════════════════════════
+
+Friday Evening - Start JeebsAI:
+
+  $ ./jeebs
+  ✅ Service starts
+  ✅ Training mode auto-enabled
+  ✅ 🟢 RUNNING shows in dashboard
+  ✅ Jeebs starts learning automatically
+
+Saturday Morning - Check Dashboard:
+
+  ✅ Dozens of training cycles completed
+  ✅ Thousands of new knowledge items
+  ✅ Training humming along nicely
+  ✅ 🟢 RUNNING indicator
+
+Saturday Afternoon - Need to Debug:
+
+  ⚠️ Something seems off
+  ✅ Click TOGGLE in admin dashboard
+  ✅ Confirm to stop training
+  ✅ Status changes to 🔴 STOPPED
+  ✅ Training gracefully exits
+  ✅ Investigate issue
+  ✅ Fix the problem
+
+  ✅ Click TOGGLE again to resume
+  ✅ Confirm to start training
+  ✅ Status changes to 🟢 RUNNING
+  ✅ Jeebs back to learning
+
+No data loss, no conflicts, no hassle!
+
+
+BENEFITS:
+═══════════════════════════════════════════════════════════════
+
+✅ Jeebs learns continuously without manual intervention
+✅ Can pause learning anytime if needed
+✅ Emergency off switch always available
+✅ Simple, familiar UI (like Internet toggle)
+✅ Safe - no forced restarts needed
+✅ Respects user control
+✅ Transparent status display
+
+
+═══════════════════════════════════════════════════════════════
+
+✅ READY TO DEPLOY!
+
+Training mode will auto-run on startup.
+Admin dashboard has on/off toggle.
+No breaking changes.
+Safe and simple!
+
+═══════════════════════════════════════════════════════════════

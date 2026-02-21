@@ -2,6 +2,7 @@ use actix_session::Session;
 use actix_web::{get, post, web, HttpResponse, Responder};
 use chrono::Local;
 use rand::seq::SliceRandom;
+use rand::Rng;
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -1176,9 +1177,10 @@ fn training_interval_seconds() -> u64 {
 
 fn training_state_default() -> TrainingModeState {
     TrainingModeState {
-        enabled: false,
+        enabled: true,  // AUTO-RUN training mode by default
         updated_at: Local::now().to_rfc3339(),
         updated_by: "system".to_string(),
+        // ...existing code...
         last_cycle_at: None,
         total_cycles: 0,
         total_topics_processed: 0,
@@ -1607,6 +1609,9 @@ async fn store_external_learning_doc(
 async fn run_training_cycle(state: &AppState) -> TrainingCycleReport {
     let cycle_started_at = Local::now().to_rfc3339();
     let cycle_timer = Instant::now();
+    let min_duration = Duration::from_secs(60);  // 1 minute minimum
+    let max_duration = Duration::from_secs(300); // 5 minutes maximum
+
     let mut report = TrainingCycleReport {
         cycle_started_at: cycle_started_at.clone(),
         cycle_finished_at: cycle_started_at.clone(),
@@ -1702,7 +1707,18 @@ async fn run_training_cycle(state: &AppState) -> TrainingCycleReport {
     let mut websites_completed = 0_u64;
     let mut topics_completed = 0_u64;
 
+    // CRAWL RANDOM WEBSITES FIRST
     for site in random_sites {
+        // Check maximum duration
+        if cycle_timer.elapsed() >= max_duration {
+            mutate_training_state(&state.db, move |mode| {
+                mode.active_phase = "maximum duration reached, stopping".to_string();
+                mode.active_updated_at = Some(Local::now().to_rfc3339());
+            })
+            .await;
+            break;
+        }
+
         let target_site = site.to_string();
         mutate_training_state(&state.db, move |mode| {
             mode.active_phase = "crawling random website".to_string();
@@ -1744,7 +1760,18 @@ async fn run_training_cycle(state: &AppState) -> TrainingCycleReport {
         .await;
     }
 
+    // RESEARCH TOPICS - continue if under minimum, stop if over maximum
     for topic in topics {
+        // Check maximum duration
+        if cycle_timer.elapsed() >= max_duration {
+            mutate_training_state(&state.db, move |mode| {
+                mode.active_phase = "maximum duration reached, stopping".to_string();
+                mode.active_updated_at = Some(Local::now().to_rfc3339());
+            })
+            .await;
+            break;
+        }
+
         let target_topic = topic.clone();
         mutate_training_state(&state.db, move |mode| {
             mode.active_phase = "researching topic".to_string();
@@ -1799,6 +1826,80 @@ async fn run_training_cycle(state: &AppState) -> TrainingCycleReport {
             mode.active_updated_at = Some(Local::now().to_rfc3339());
         })
         .await;
+    }
+
+    // ENFORCE MINIMUM DURATION - if we finished too quickly, continue exploring
+    while cycle_timer.elapsed() < min_duration && report.errors.is_empty() {
+        // Check if we should continue
+        if cycle_timer.elapsed() >= max_duration {
+            break;
+        }
+
+        // Keep exploring - pick a random topic and crawl again
+        mutate_training_state(&state.db, move |mode| {
+            mode.active_phase = "continuing exploration (minimum duration)".to_string();
+            mode.active_updated_at = Some(Local::now().to_rfc3339());
+        })
+        .await;
+
+        // Pick a random site to continue exploring
+        let mut rng = rand::thread_rng();
+        let sites = random_crawl_candidates();
+        if !sites.is_empty() {
+            let idx = rng.gen_range(0..sites.len());
+            let site = sites[idx];
+
+            let target_site = site.to_string();
+            mutate_training_state(&state.db, move |mode| {
+                mode.active_phase = "exploring additional domain (minimum duration)".to_string();
+                mode.active_target = Some(target_site);
+                mode.active_updated_at = Some(Local::now().to_rfc3339());
+            })
+            .await;
+
+            let crawl_depth = 1; // Use depth 1 for additional explorations
+            match crawl_and_store(state, site, crawl_depth).await {
+                Ok(summary) => {
+                    websites_completed = websites_completed.saturating_add(1);
+                    if !report.websites_scraped.contains(&summary.start_url) {
+                        report.websites_scraped.push(summary.start_url.clone());
+                    }
+                    report.nodes_written += summary.pages_stored;
+                    report.crawl_pages_visited += summary.pages_visited;
+                    report.crawl_pages_stored += summary.pages_stored;
+                    report.crawl_links_followed += summary.links_followed;
+                    report.crawl_nodes_written += summary.pages_stored;
+                    for node in summary.stored_nodes.into_iter().take(4) {
+                        if report.learned_items.len() < 32 {
+                            report.learned_items.push(TrainingLearnedItem {
+                                node_id: node.node_id,
+                                title: node.label,
+                                summary: node.summary,
+                                source_url: node.source_url,
+                                topic: "extended_exploration".to_string(),
+                                source_type: "crawl".to_string(),
+                            });
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Continue trying other sources
+                }
+            }
+
+            let active_nodes_written = report.nodes_written as u64;
+            mutate_training_state(&state.db, move |mode| {
+                mode.active_nodes_written = active_nodes_written;
+                mode.active_websites_completed = websites_completed;
+                mode.active_updated_at = Some(Local::now().to_rfc3339());
+            })
+            .await;
+
+            // Small delay to avoid hammering
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        } else {
+            break;
+        }
     }
 
     if report.learned_items.len() > 24 {

@@ -142,6 +142,59 @@
             </div>
 
             <div
+                id="trainingModeToggle"
+                style="
+                    background: #23283a;
+                    padding: 16px;
+                    border-radius: 12px;
+                    margin-bottom: 20px;
+                    border: 1px solid #8bc34a;
+                    text-align: center;
+                "
+            >
+                <h3 style="margin-top: 0; color: #8bc34a">🤖 Training Mode</h3>
+                <div
+                    style="
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        gap: 15px;
+                    "
+                >
+                    <div
+                        id="trainingStatus"
+                        style="
+                            font-size: 1.1em;
+                            font-weight: bold;
+                            color: #8bc34a;
+                        "
+                    >
+                        Loading...
+                    </div>
+                    <button
+                        id="trainingToggleBtn"
+                        onclick="toggleTrainingMode()"
+                        style="
+                            padding: 10px 20px;
+                            background: #8bc34a;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-weight: bold;
+                            color: #181c24;
+                            font-size: 14px;
+                        "
+                    >
+                        TOGGLE
+                    </button>
+                </div>
+                <div style="margin-top: 10px; color: #aaa; font-size: 0.9em">
+                    Enable/disable automatic training cycles (learns from web &
+                    chat)
+                </div>
+            </div>
+
+            <div
                 id="serverLogs"
                 style="
                     background: #23283a;
@@ -918,6 +971,104 @@
                 }
             }
 
+            async function loadTrainingStatus() {
+                if (!rootAdminAuthorized) return;
+                try {
+                    const res = await fetch("/api/admin/training/status", {
+                        headers: authHeaders(),
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const statusEl =
+                            document.getElementById("trainingStatus");
+                        const toggleBox =
+                            document.getElementById("trainingModeToggle");
+
+                        if (data.training && data.training.enabled) {
+                            statusEl.innerHTML =
+                                '🟢 <span style="color: #8bc34a;">RUNNING</span>';
+                            statusEl.style.color = "#8bc34a";
+                            toggleBox.style.borderColor = "#8bc34a";
+                            document.querySelector(
+                                "#trainingModeToggle h3",
+                            ).style.color = "#8bc34a";
+                        } else {
+                            statusEl.innerHTML =
+                                '🔴 <span style="color: #ff6b6b;">STOPPED</span>';
+                            statusEl.style.color = "#ff6b6b";
+                            toggleBox.style.borderColor = "#ff6b6b";
+                            document.querySelector(
+                                "#trainingModeToggle h3",
+                            ).style.color = "#ff6b6b";
+                        }
+                    } else {
+                        document.getElementById("trainingStatus").innerText =
+                            "Error loading status";
+                    }
+                } catch {
+                    document.getElementById("trainingStatus").innerText =
+                        "Error";
+                }
+            }
+
+            async function toggleTrainingMode() {
+                if (!rootAdminAuthorized) return;
+
+                // Get current status
+                const statusRes = await fetch("/api/admin/training/status", {
+                    headers: authHeaders(),
+                });
+
+                if (!statusRes.ok) {
+                    alert("Failed to get current training status");
+                    return;
+                }
+
+                const currentStatus = await statusRes.json();
+                const newEnabled = !(
+                    currentStatus.training && currentStatus.training.enabled
+                );
+
+                // Confirm with user
+                const action = newEnabled ? "START" : "STOP";
+                if (!action === "STOP") {
+                    if (
+                        !confirm(
+                            `Are you sure you want to ${action} training mode?\n\n${newEnabled ? "Training will automatically research topics and learn from web sources." : "This will pause automatic learning."}`,
+                        )
+                    ) {
+                        return;
+                    }
+                } else if (
+                    !confirm(
+                        `Are you sure you want to ${action} training mode?\n\n${newEnabled ? "Training will automatically research topics and learn from web sources." : "This will pause automatic learning."}`,
+                    )
+                ) {
+                    return;
+                }
+
+                // Toggle training mode
+                const res = await fetch("/api/admin/training/mode", {
+                    method: "POST",
+                    headers: authHeaders(true),
+                    body: JSON.stringify({ enabled: newEnabled }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    loadTrainingStatus();
+                    alert(
+                        data.message ||
+                            `Training mode ${newEnabled ? "started" : "stopped"} successfully!`,
+                    );
+                } else {
+                    const errorData = await res.json().catch(() => ({}));
+                    alert(
+                        `Failed to toggle training: ${errorData.error || "Unknown error"}`,
+                    );
+                }
+            }
+
             async function bootstrapDashboard() {
                 const allowed = await ensureRootAdminAccess();
                 if (!allowed) return;
@@ -926,12 +1077,14 @@
                 loadLogs();
                 loadSessions();
                 loadInternetStatus();
+                loadTrainingStatus();
 
                 setInterval(() => {
                     loadStatus();
                     loadLogs();
                     loadSessions();
                     loadInternetStatus();
+                    loadTrainingStatus();
                 }, 5000);
             }
 
