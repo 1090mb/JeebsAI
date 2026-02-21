@@ -1887,6 +1887,11 @@ pub async fn admin_train(session: Session, state: web::Data<AppState>) -> impl R
         .flatten()
         .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string());
 
+    {
+        let mut internet_enabled = state.internet_enabled.write().unwrap();
+        *internet_enabled = true;
+    }
+
     let mut training_state = load_training_state(&state.db).await;
     training_state.enabled = true;
     training_state.updated_at = Local::now().to_rfc3339();
@@ -1908,10 +1913,19 @@ pub async fn admin_train(session: Session, state: web::Data<AppState>) -> impl R
     training_state.updated_by = actor;
     let _ = save_training_state(&state.db, &training_state).await;
 
+    crate::logging::log(
+        &state.db,
+        "INFO",
+        "training_mode",
+        "Internet enabled automatically because training mode was enabled.",
+    )
+    .await;
+
     HttpResponse::Ok().json(json!({
         "ok": true,
         "message": "Training mode enabled and one training cycle completed.",
         "report": report,
+        "internet_enabled": *state.internet_enabled.read().unwrap(),
         "training": training_state
     }))
 }
@@ -1956,6 +1970,8 @@ pub async fn set_training_mode(
     training.updated_by = actor.clone();
     if req.enabled {
         training.last_error = None;
+        let mut internet_enabled = state.internet_enabled.write().unwrap();
+        *internet_enabled = true;
     }
     if let Err(err) = save_training_state(&state.db, &training).await {
         return HttpResponse::InternalServerError()
@@ -1974,9 +1990,23 @@ pub async fn set_training_mode(
     )
     .await;
 
+    if req.enabled {
+        crate::logging::log(
+            &state.db,
+            "INFO",
+            "training_mode",
+            &format!(
+                "Internet enabled automatically for training mode by {}",
+                actor
+            ),
+        )
+        .await;
+    }
+
     HttpResponse::Ok().json(json!({
         "ok": true,
         "enabled": req.enabled,
+        "internet_enabled": *state.internet_enabled.read().unwrap(),
         "training": training
     }))
 }
