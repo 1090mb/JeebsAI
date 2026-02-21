@@ -2231,29 +2231,53 @@ async fn custom_ai_logic_with_context(
         || lower.contains("how much knowledge")
         || lower.contains("knowledge base")
     {
-        if let Ok(stats) = crate::knowledge_retrieval::get_knowledge_stats(db).await {
-            let mut lines = vec!["📊 **Knowledge Base Statistics**:".to_string(), String::new()];
+        if let Ok(summary) = crate::data_synthesis::get_knowledge_summary(db).await {
+            return summary;
+        }
+        return "I'm tracking knowledge but couldn't retrieve summary right now.".to_string();
+    }
 
-            if let Some(brain_nodes) = stats.get("brain_nodes") {
-                lines.push(format!("🧠 Brain Nodes: {}", brain_nodes));
-            }
-            if let Some(triples) = stats.get("knowledge_triples") {
-                lines.push(format!("🔗 Knowledge Triples: {}", triples));
-            }
-            if let Some(faq) = stats.get("faq_entries") {
-                lines.push(format!("❓ FAQ Entries: {}", faq));
-            }
-            if let Some(contexts) = stats.get("contexts") {
-                lines.push(format!("📚 Contextual Topics: {}", contexts));
-            }
+    // Show knowledge synthesis and insights
+    if lower.contains("knowledge insights")
+        || lower.contains("what patterns")
+        || lower.contains("knowledge analysis")
+        || lower.contains("what can you synthesize")
+        || lower.contains("knowledge gaps")
+    {
+        if let Ok(profile) = crate::data_synthesis::generate_knowledge_insights(db).await {
+            let mut lines = vec!["🔍 **Knowledge Synthesis & Insights**".to_string(), String::new()];
 
-            let total: u64 = stats.values().sum();
+            lines.push(format!("📊 Total Items: {}", profile.total_items));
+            lines.push(format!("🏷️ Domains: {}", profile.domains.len()));
             lines.push(String::new());
-            lines.push(format!("**Total Knowledge Items**: {}", total));
+
+            lines.push("**Domains:**".to_string());
+            for domain in profile.domains.iter().take(5) {
+                lines.push(format!("  • {}: {} items", domain.domain, domain.item_count));
+            }
+
+            if !profile.knowledge_gaps.is_empty() {
+                lines.push(String::new());
+                lines.push("**Identified Gaps:**".to_string());
+                for gap in profile.knowledge_gaps.iter().take(3) {
+                    lines.push(format!("  • {}", gap));
+                }
+            }
+
+            if !profile.emerging_patterns.is_empty() {
+                lines.push(String::new());
+                lines.push("**Emerging Patterns:**".to_string());
+                for pattern in profile.emerging_patterns.iter().take(3) {
+                    lines.push(format!("  • {}", pattern));
+                }
+            }
+
+            lines.push(String::new());
+            lines.push("This analysis helps me understand my knowledge structure and identify areas for growth.".to_string());
 
             return lines.join("\n");
         }
-        return "I'm tracking knowledge across multiple sources but couldn't retrieve stats right now.".to_string();
+        return "I'm analyzing my knowledge but couldn't generate insights right now.".to_string();
     }
 
     // Show vocabulary stats
