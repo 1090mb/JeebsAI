@@ -3062,6 +3062,10 @@ pub async fn set_training_mode(
     training.enabled = req.enabled;
     training.updated_at = Local::now().to_rfc3339();
     training.updated_by = actor.clone();
+
+    // Save toggle state to database (persist user preference)
+    let _ = crate::toggle_manager::save_training_toggle_state(&state.db, req.enabled).await;
+
     if req.enabled {
         training.last_error = None;
         let mut internet_enabled = state.internet_enabled.write().unwrap();

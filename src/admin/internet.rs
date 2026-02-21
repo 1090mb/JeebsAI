@@ -42,6 +42,9 @@ pub async fn set_internet_status(
     let mut enabled = data.internet_enabled.write().unwrap();
     *enabled = req.enabled;
 
+    // Save toggle state to database (persist user preference)
+    let _ = crate::toggle_manager::save_internet_toggle_state(&data.db, req.enabled).await;
+
     // Log the change
     crate::logging::log(
         &data.db,

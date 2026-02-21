@@ -123,19 +123,27 @@ async fn main() -> std::io::Result<()> {
     ];
     plugins.extend(jeebs::plugins::load_dynamic_plugins("plugins"));
 
+    // Load toggle states from database (remembers user's last settings)
+    let (internet_enabled, training_enabled) = jeebs::toggle_manager::load_toggle_states(&pool)
+        .await
+        .unwrap_or((false, false));
+
     let state = web::Data::new(AppState {
         db: pool.clone(),
         plugins,
         ip_blacklist,
         ip_whitelist,
         sys: Arc::new(Mutex::new(System::new_all())),
-        internet_enabled: Arc::new(RwLock::new(false)),
+        internet_enabled: Arc::new(RwLock::new(internet_enabled)),
     });
 
     // Start Jeebs autonomous evolution loop
     evolution::spawn_autonomous_thinker(state.db.clone());
-    // Start Jeebs autonomous internet training worker
-    cortex::spawn_autonomous_training(state.clone());
+
+    // Start Jeebs autonomous internet training worker (respects saved training state)
+    if training_enabled {
+        cortex::spawn_autonomous_training(state.clone());
+    }
 
     let port: u16 = env::var("PORT")
         .ok()

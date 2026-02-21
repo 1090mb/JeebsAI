@@ -14,6 +14,7 @@ pub mod question_learning;
 pub mod security;
 pub mod server;
 pub mod state;
+pub mod toggle_manager;
 pub mod updater;
 pub mod utils;
 
