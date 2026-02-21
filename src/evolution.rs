@@ -194,6 +194,27 @@ fn require_root_admin(session: &Session) -> Result<String, HttpResponse> {
         .unwrap_or_else(|| crate::auth::ROOT_ADMIN_USERNAME.to_string()))
 }
 
+fn require_manual_proposal_actor(session: &Session) -> Result<String, HttpResponse> {
+    let actor = require_root_admin(session)?;
+    if actor != crate::auth::ROOT_ADMIN_USERNAME {
+        return Err(HttpResponse::Forbidden().json(
+            json!({"error": "Only the 1090mb admin account can apply or approve proposals"}),
+        ));
+    }
+
+    let actor_lower = actor.to_ascii_lowercase();
+    if actor_lower.contains("jeebs")
+        || actor_lower.contains("autonomy")
+        || actor_lower.contains("scheduler")
+    {
+        return Err(HttpResponse::Forbidden().json(json!({
+            "error": "Autonomous actors are blocked from proposal approval/apply actions"
+        })));
+    }
+
+    Ok(actor)
+}
+
 fn update_key(id: &str) -> String {
     format!("{UPDATE_KEY_PREFIX}{id}")
 }
@@ -1266,6 +1287,13 @@ async fn run_think_cycle_internal(
     }
 
     let mut candidate = build_update_from_signals(&signals);
+    // Autonomous proposals are always staged for explicit human review.
+    candidate.status = "pending".to_string();
+    candidate.backup = None;
+    candidate.applied_at = None;
+    candidate.denied_at = None;
+    candidate.resolved_at = None;
+    candidate.rolled_back_at = None;
     candidate = normalize_update(candidate);
     validate_changes(&candidate.changes)?;
 
@@ -1437,7 +1465,7 @@ pub async fn apply_update(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let actor = match require_root_admin(&session) {
+    let actor = match require_manual_proposal_actor(&session) {
         Ok(username) => username,
         Err(response) => return response,
     };
@@ -1505,7 +1533,7 @@ pub async fn deny_update(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let actor = match require_root_admin(&session) {
+    let actor = match require_manual_proposal_actor(&session) {
         Ok(username) => username,
         Err(response) => return response,
     };
@@ -1540,7 +1568,7 @@ pub async fn resolve_update(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let actor = match require_root_admin(&session) {
+    let actor = match require_manual_proposal_actor(&session) {
         Ok(username) => username,
         Err(response) => return response,
     };
@@ -1574,7 +1602,7 @@ pub async fn rollback_update(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let actor = match require_root_admin(&session) {
+    let actor = match require_manual_proposal_actor(&session) {
         Ok(username) => username,
         Err(response) => return response,
     };
