@@ -1,0 +1,349 @@
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║     ✅ QUESTION LEARNING SYSTEM - IMPLEMENTED! ✅           ║
+║                                                              ║
+║  Ask Questions → Get Answers → Store & Recall Later         ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+WHAT YOU ASKED FOR:
+═══════════════════════════════════════════════════════════════
+
+"Allow Jeebs to ask questions to Google and store the question
+and answer as data to learn and call back to later"
+
+
+✅ FULLY IMPLEMENTED!
+
+
+FEATURES:
+═══════════════════════════════════════════════════════════════
+
+🔍 ASK QUESTIONS
+   • Ask Jeebs any question
+   • Jeebs searches the web for answers
+   • Extracts answer from Google search results
+   • Stores Q&A pair in knowledge base
+
+💾 REMEMBER ANSWERS
+   • All Q&A stored in brain nodes
+   • Also stored as knowledge triples
+   • Indexed for fast retrieval
+   • Persists across restarts
+
+🧠 RECALL LATER
+   • Ask the same question again
+   • Jeebs remembers and recalls answer
+   • No need to re-search web
+   • Instant responses
+
+📚 ORGANIZE KNOWLEDGE
+   • Categorize learned questions
+   • Track confidence level
+   • Store source URL
+   • Timestamp learning
+
+
+HOW TO USE:
+═══════════════════════════════════════════════════════════════
+
+IN CHAT - Ask Jeebs:
+
+1. Basic question format:
+   "ask: what is photosynthesis?"
+   "ask about: how does DNA replication work?"
+   "question: explain quantum entanglement"
+
+2. Natural questions:
+   "what is machine learning?"
+   "how does photosynthesis work?"
+   "explain climate change"
+
+3. View what you've learned:
+   "what questions have you asked?"
+   "what have you learned about?"
+   "show me your recent questions"
+
+4. See statistics:
+   "question statistics"
+   "how many questions have you learned?"
+   "q&a stats"
+
+
+EXAMPLE INTERACTIONS:
+═══════════════════════════════════════════════════════════════
+
+FIRST TIME - Learning:
+
+User: "ask: what is photosynthesis?"
+
+Jeebs: [Searches web]
+"Great question! 🔍
+
+Q: what is photosynthesis?
+
+A: Photosynthesis is a process used by plants and
+   other organisms to convert light energy into
+   chemical energy that can later be released...
+
+✅ I've learned this and will remember it!"
+
+SECOND TIME - Remembering:
+
+User: "ask: what is photosynthesis?"
+
+Jeebs: "I already know this! 🧠
+
+Q: what is photosynthesis?
+
+A: Photosynthesis is a process used by plants...
+
+Learned on: 2026-02-21T15:30:00"
+
+VIEWING LEARNED QUESTIONS:
+
+User: "what questions have you asked?"
+
+Jeebs: "📚 Recent Questions I've Asked & Learned
+
+Q: What is photosynthesis?
+A: Photosynthesis is a process used by plants...
+📌 Category: general
+
+Q: How does DNA replication work?
+A: DNA replication is the process by which a DNA...
+📌 Category: general
+
+[more questions...]"
+
+
+SYSTEM ARCHITECTURE:
+═══════════════════════════════════════════════════════════════
+
+Question Learning Flow:
+
+  User asks question in chat
+       ↓
+  Check if already in memory
+       ├─ Found: Return stored answer ✅
+       └─ Not found: Continue...
+       ↓
+  Search the web for answer
+       ↓
+  Extract answer from Google results
+       ↓
+  Store Q&A pair in database
+       ├─ Brain node (for general knowledge)
+       ├─ Knowledge triple (for retrieval)
+       └─ jeebs_store (for fast lookup)
+       ↓
+  Return answer to user
+       ↓
+  Remember for next time!
+
+
+DATA STORAGE:
+═══════════════════════════════════════════════════════════════
+
+Each Q&A pair is stored in three places:
+
+1. BRAIN NODES:
+   • Stores as node with question in label
+   • Question, answer, source, confidence, category
+   • Enables data synthesis analysis
+
+2. KNOWLEDGE TRIPLES:
+   • Subject: Question
+   • Predicate: "answer_is"
+   • Object: Answer
+   • Enables semantic search
+
+3. JEEBS_STORE:
+   • Fast lookup by question hash
+   • Immediate retrieval
+   • Reduces database queries
+
+
+CORE FUNCTIONS:
+═══════════════════════════════════════════════════════════════
+
+store_qa_pair(db, question, answer, source, confidence, category)
+  → Stores Q&A in database
+  → Returns Q&A ID
+
+find_answer_in_memory(db, question)
+  → Searches for stored answer
+  → Returns LearnedQA or None
+
+ask_web_question(client, question)
+  → Searches Google for answer
+  → Returns (question, answer)
+
+ask_jeebs_question(db, client, question, category)
+  → Checks memory first
+  → Searches web if needed
+  → Stores result
+  → Returns (answer, is_from_memory)
+
+get_recent_questions(db, limit)
+  → Returns recently learned Q&As
+  → Great for viewing learning history
+
+get_qa_statistics(db)
+  → Returns total Q&A count
+  → Breaks down by category
+  → Shows learning diversity
+
+get_learned_qa_by_category(db, category, limit)
+  → Returns Q&As in specific category
+  → Useful for focused learning
+
+
+WEB SEARCH INTEGRATION:
+═══════════════════════════════════════════════════════════════
+
+Uses Google Search:
+  • Builds search query from question
+  • URL encodes the question
+  • Fetches Google search results
+  • Parses HTML for featured snippets
+  • Falls back to search descriptions
+  • Extracts clean text answer
+
+Smart Answer Extraction:
+  • Looks for Google featured snippets first
+  • Falls back to regular search results
+  • Cleans HTML tags from content
+  • Handles multiple formats
+  • Provides fallback message if needed
+
+
+CHAT COMMANDS ADDED:
+═══════════════════════════════════════════════════════════════
+
+Learning Questions:
+
+"ask: [question]"
+"ask about: [question]"
+"question: [question]"
+"what is [topic]?"
+"how does [topic] work?"
+"explain [topic]"
+
+Viewing Learned Questions:
+
+"what questions have you asked?"
+"what have you learned about?"
+"show me what you've learned"
+"recent questions"
+
+Viewing Statistics:
+
+"question statistics"
+"how many questions have you learned?"
+"q&a stats"
+
+
+CATEGORIES:
+═══════════════════════════════════════════════════════════════
+
+Q&As can be organized into categories:
+
+• general (default)
+• science
+• technology
+• history
+• nature
+• health
+• etc.
+
+Helps organize and retrieve related questions.
+
+
+USE CASES:
+═══════════════════════════════════════════════════════════════
+
+🎓 Education:
+   Ask questions on topics you're learning
+   Build personal knowledge database
+   Jeebs becomes learning assistant
+
+📚 Research:
+   Store research questions and findings
+   Build research database
+   Quick reference for future queries
+
+🧠 Personal Knowledge:
+   Ask any question about anything
+   Build your own knowledge base
+   Jeebs remembers everything
+
+💡 Brainstorming:
+   Ask exploratory questions
+   Store insights learned
+   Build idea connections
+
+🔍 Investigation:
+   Ask investigative questions
+   Track findings
+   Build evidence database
+
+
+BENEFITS:
+═══════════════════════════════════════════════════════════════
+
+✅ Learn from questions
+   Every question adds to knowledge
+
+✅ Remember answers
+   Never lose information again
+
+✅ Fast retrieval
+   Instant answers from memory
+
+✅ Track sources
+   Know where information came from
+
+✅ Build knowledge graph
+   Connect questions across topics
+
+✅ Scale understanding
+   Exponential knowledge growth
+
+✅ Self-improvement
+   Jeebs learns through questions
+
+
+TECHNICAL DETAILS:
+═══════════════════════════════════════════════════════════════
+
+New Module: src/question_learning.rs
+  • LearnedQA struct
+  • Q&A storage functions
+  • Web search integration
+  • Retrieval functions
+  • Statistics functions
+
+New Dependency: urlencoding = "2.1"
+  • For encoding search queries
+
+Database Changes: NONE!
+  • Uses existing tables
+  • brain_nodes (for Q&A storage)
+  • knowledge_triples (for semantic search)
+  • jeebs_store (for fast lookup)
+
+Chat Integration:
+  • Added Q&A commands to cortex.rs
+  • Integrated with knowledge synthesis
+  • Compatible with existing systems
+
+
+═══════════════════════════════════════════════════════════════
+
+✅ JEEBS CAN NOW ASK QUESTIONS AND LEARN!
+
+Ready to deploy!
+
+═══════════════════════════════════════════════════════════════

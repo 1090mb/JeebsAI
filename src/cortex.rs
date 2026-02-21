@@ -1180,7 +1180,6 @@ fn training_state_default() -> TrainingModeState {
         enabled: true,  // AUTO-RUN training mode by default
         updated_at: Local::now().to_rfc3339(),
         updated_by: "system".to_string(),
-        // ...existing code...
         last_cycle_at: None,
         total_cycles: 0,
         total_topics_processed: 0,
