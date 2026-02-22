@@ -5,7 +5,9 @@ use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::cookie::Key;
 use actix_web::dev::ServiceRequest;
 use actix_web::{web, App, HttpServer};
-use jeebs::{admin, auth, chat, cortex, evolution, logging, brain_parsing_api, AppState};
+use jeebs::{
+    admin, auth, brain_parsing_api, chat, cortex, evolution, logging, user_chat, AppState,
+};
 use jeebs::plugins::{
     Base64Plugin, CalcPlugin, ContactPlugin, ErrorPlugin, HashPlugin, LogicPlugin, MemoryPlugin,
     NewsPlugin, PasswordPlugin, SummaryPlugin, SystemPlugin, TimePlugin, TodoPlugin,
@@ -184,6 +186,7 @@ async fn main() -> std::io::Result<()> {
             .service(auth::login_pgp)
             .service(auth::logout)
             .service(auth::session_ping)
+            .service(auth::auth_status)
             .service(chat::jeebs_api)
             .service(user_chat::user_chat)
             .service(user_chat::chat_preflight)
