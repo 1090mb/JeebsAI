@@ -129,7 +129,6 @@ pub async fn query_graph_entity(
         "error": "entity parameter required",
     }))
 }
-}
 
 /// Query the knowledge graph by category
 #[post("/api/brain/graph/query/category")]
