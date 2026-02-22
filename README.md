@@ -398,6 +398,21 @@ All major features are separated into modules and submodules for maintainability
 - `brain` — Knowledge graph, training, and storage
 - `auth` — Registration, login, password reset
 
+## Recent changes (Feb 2026)
+
+- Improved VPS deployment and nginx handling: `deploy_vps.sh` now
+   supports optional `DOMAIN` configuration, ensures nginx is started,
+   and uses `127.0.0.1` for upstreams to avoid IPv6 connection issues.
+- Evolution UI updated to match the admin dashboard look-and-feel and
+   backend guards were added so denied proposals cannot be applied.
+- Rate limiting is now configurable with `RATE_PER_SECOND` and
+   `RATE_BURST` environment variables; client-side retries/backoff were
+   improved to reduce 429 noise in the UI.
+
+These changes make deployment and management on modest VPS hosts
+more reliable. See `deploy_vps.sh`, `setup_jeebs_nginx.sh`, and
+`webui/evolution.html` for implementation details.
+
 ## Development
 
 - All business logic is modularized for easy extension
