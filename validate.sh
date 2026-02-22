@@ -32,18 +32,26 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 LIVE_MODE=false
-[ "${1:-}" = "--live" ] && LIVE_MODE=true
+SKIP_BUILD=false
+for arg in "$@"; do
+    case "$arg" in
+        --live) LIVE_MODE=true ;;
+        --skip-build) SKIP_BUILD=true ;;
+    esac
+done
 
 echo -e "${BOLD}JeebsAI Validation Suite${NC}"
 echo "Project: $SCRIPT_DIR"
-echo "Mode:    $([ "$LIVE_MODE" = true ] && echo 'Static + Live' || echo 'Static only')"
+echo "Mode:    $([ "$LIVE_MODE" = true ] && echo 'Static + Live' || echo 'Static only')$([ "$SKIP_BUILD" = true ] && echo ' (skip build)' || echo '')"
 
 # ============================================================================
 # 1. RUST BUILD CHECK
 # ============================================================================
 header "Rust Compilation"
 
-if command -v cargo &>/dev/null; then
+if [ "$SKIP_BUILD" = true ]; then
+    pass "cargo check skipped (--skip-build)"
+elif command -v cargo &>/dev/null; then
     cargo_output=$(cargo check 2>&1) || true
     if echo "$cargo_output" | grep -q '^error'; then
         fail "cargo check has errors"

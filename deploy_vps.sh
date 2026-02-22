@@ -13,10 +13,10 @@ echo "Dir:  $APP_DIR"
 echo "Port: $PORT"
 echo ""
 
-# ── 0. Pre-deploy validation ────────────────────────────────
+# ── 0. Pre-deploy validation (skip cargo check — we build in step 4) ──
 if [ -f "$APP_DIR/validate.sh" ]; then
     echo "[0/7] Running pre-deploy validation..."
-    if ! bash "$APP_DIR/validate.sh"; then
+    if ! bash "$APP_DIR/validate.sh" --skip-build; then
         echo ""
         echo "ERROR: Validation failed. Fix the issues above before deploying."
         echo "To force deploy anyway: SKIP_VALIDATE=1 bash deploy_vps.sh"
@@ -25,11 +25,25 @@ if [ -f "$APP_DIR/validate.sh" ]; then
     echo ""
 fi
 
-# ── 1. System dependencies ──────────────────────────────────
+# ── 1. System dependencies + swap ────────────────────────────
 echo "[1/7] Installing system dependencies..."
 apt-get update -qq
 apt-get install -y -qq build-essential pkg-config libssl-dev libsqlite3-dev git curl >/dev/null 2>&1
 echo "  Done."
+
+# Ensure swap exists (Rust compilation needs ~1.5GB+ RAM)
+if [ ! -f /swapfile ]; then
+    echo "  Creating 2GB swap (needed for Rust compilation)..."
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo "  Swap enabled."
+elif ! swapon --show | grep -q /swapfile; then
+    swapon /swapfile 2>/dev/null || true
+    echo "  Swap activated."
+fi
 
 # ── 2. Install Rust if missing ───────────────────────────────
 if ! command -v cargo &>/dev/null; then
@@ -48,7 +62,7 @@ if [ -d "$APP_DIR/.git" ]; then
     git pull --ff-only || git pull --rebase
 else
     echo "[3/7] Cloning repository..."
-    git clone https://github.com/1090mb/JeebsAI.git "$APP_DIR" || {
+    git clone https://github.com/Deployed-Labs/JeebsAI.git "$APP_DIR" || {
         echo "ERROR: Could not clone. Make sure $APP_DIR exists with the repo."
         exit 1
     }
@@ -56,9 +70,15 @@ else
 fi
 
 # ── 4. Build release binary ─────────────────────────────────
-echo "[4/7] Building release binary (this may take a few minutes)..."
+echo "[4/7] Building release binary (this may take 5-15 minutes on first build)..."
 cd "$APP_DIR"
-cargo build --release 2>&1 | tail -5
+CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)} cargo build --release 2>&1 | tail -10
+if [ ! -f "$APP_DIR/target/release/jeebs" ]; then
+    echo "ERROR: Build failed — binary not found."
+    echo "Check: free -m  (need ~1.5GB RAM+swap)"
+    echo "Try:   CARGO_BUILD_JOBS=1 bash deploy_vps.sh"
+    exit 1
+fi
 echo "  Binary: $APP_DIR/target/release/jeebs"
 
 # ── 5. Create SQLite database if missing ─────────────────────
