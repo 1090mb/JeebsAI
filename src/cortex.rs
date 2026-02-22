@@ -2163,3 +2163,55 @@ pub async fn get_learning_summary_endpoint(
         }
     }
 }
+
+// ===== CORTEX STRUCT & IMPLEMENTATION =====
+
+/// Main Cortex struct for AI thinking and responses
+pub struct Cortex;
+
+impl Cortex {
+    /// Generate a response for a user's prompt
+    pub async fn think_for_user(
+        prompt: &str,
+        state: &web::Data<AppState>,
+        user_id: &str,
+        username: Option<&str>,
+    ) -> String {
+        Self::think(prompt, state).await
+    }
+
+    /// Generate a response for a prompt
+    pub async fn think(prompt: &str, state: &web::Data<AppState>) -> String {
+        if prompt.is_empty() {
+            return "Please provide a prompt.".to_string();
+        }
+
+        // Try to get a response from knowledge retrieval first
+        if let Ok(result) = crate::knowledge_retrieval::retrieve_knowledge(&state.db, prompt, 5).await {
+            if !result.items.is_empty() {
+                let summaries: Vec<String> = result.items.iter()
+                    .take(3)
+                    .map(|item| format!("{}. {}", item.label, item.summary))
+                    .collect();
+
+                // Format a response with knowledge
+                return format!(
+                    "Based on my knowledge: {}",
+                    summaries.join(" ")
+                );
+            }
+        }
+
+        // If knowledge integration is available, try to enhance with learned facts
+        if let Ok(enhanced) = crate::knowledge_integration::enhance_response_with_knowledge(
+            &state.db,
+            &format!("I understand your question about: {}", prompt),
+            prompt,
+        ).await {
+            return enhanced;
+        }
+
+        // Default response
+        format!("I understand your question: '{}'. This is a default response as the full AI engine is loading.", prompt)
+    }
+}
