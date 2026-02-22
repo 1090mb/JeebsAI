@@ -14,12 +14,12 @@ if [ ! -f "Cargo.toml" ]; then
     exit 1
 fi
 
-# Add all new/modified files
-git add webui/admin_dashboard.html pull_from_github.sh deploy_topic_learning.sh quick_push.sh 2>/dev/null || true
+# Add ALL changes (including deletions and new files)
+git add .
 
 # Commit if there are changes
 if ! git diff --cached --quiet 2>/dev/null; then
-    git commit -m "Add Topic Learning textbox to admin dashboard"
+    git commit -m "Update JeebsAI: Merge and commit all changes"
 fi
 
 # Push to GitHub
@@ -28,6 +28,4 @@ git push origin main
 echo ""
 echo "✅ PUSHED TO GITHUB!"
 echo ""
-echo "📥 To deploy on VPS, run:"
-echo "   bash pull_from_github.sh"
-echo ""
+echo "🚀 Deployment triggered via GitHub Actions."

@@ -38,6 +38,33 @@ async fn main() -> std::io::Result<()> {
         HttpResponse::Ok().body(chdsc.emergent_summary())
     }
 
+    async fn get_version() -> impl Responder {
+        // Prefer a VERSION file placed next to the binary (deployed by CI).
+        let file_ver = tokio::task::spawn_blocking(|| std::fs::read_to_string("VERSION")).await.ok().and_then(|r| r.ok()).map(|s| s.trim().to_string());
+
+        if let Some(v) = file_ver {
+            return HttpResponse::Ok().json(serde_json::json!({"version": v}));
+        }
+
+        // Fallback: count release tags (v*) and use that as the release number.
+        let tag_count = tokio::task::spawn_blocking(|| {
+            std::process::Command::new("sh")
+                .arg("-c")
+                .arg("git tag --list 'v*' | wc -l")
+                .output()
+        })
+        .await
+        .ok()
+        .and_then(|res| res.ok())
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(0);
+
+        let patch = if tag_count == 0 { 1 } else { tag_count };
+        let ver = format!("v0.0.{}", patch);
+        HttpResponse::Ok().json(serde_json::json!({"version": ver}))
+    }
+
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:./jeebs.db".to_string());
 
     // Ensure the SQLite directory exists if using a file path
@@ -50,6 +77,7 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
+    println!("Connecting to database at: {}", database_url);
     let pool: SqlitePool = sqlx::sqlite::SqlitePoolOptions::new()
         .connect(&database_url)
         .await
@@ -285,6 +313,7 @@ async fn main() -> std::io::Result<()> {
             .service(cortex::cancel_extended_run)
             .service(cortex::get_learning_statistics)
             .service(cortex::get_learning_summary_endpoint)
+            .route("/api/version", web::get().to(get_version))
             .service(Files::new("/webui", "./webui").index_file("index.html"))
             .service(Files::new("/", "./webui").index_file("index.html"))
     })

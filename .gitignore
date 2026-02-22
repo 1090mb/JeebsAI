@@ -42,6 +42,7 @@ mcp-state.json
 *.pem
 *.key
 !*.pub
+/.github/keys
 
 ## Misc
 webui/*Diagnostics*.md

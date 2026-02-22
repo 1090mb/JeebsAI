@@ -225,6 +225,14 @@ code, pre {
     white-space: nowrap;
 }
 
+.jeebs-version {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-left: 6px;
+    opacity: 0.85;
+    font-weight: 600;
+}
+
 .topnav-brand svg {
     width: 28px;
     height: 28px;

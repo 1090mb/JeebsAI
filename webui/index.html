@@ -8,6 +8,47 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="/webui/style.css"/>
 </head>
+<style>
+    /* Glass Box Reasoning UI */
+    .thought-process {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-size: 0.85em;
+        overflow: hidden;
+        max-width: 90%;
+    }
+    .thought-summary {
+        padding: 6px 10px;
+        cursor: pointer;
+        color: #8b949e;
+        font-weight: 500;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #21262d;
+    }
+    .thought-summary:hover { color: #c9d1d9; }
+    .thought-content {
+        padding: 8px 10px;
+        border-top: 1px solid #30363d;
+        color: #8b949e;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9em;
+        background: #0d1117;
+        white-space: pre-wrap;
+    }
+    /* Contextual Chips */
+    .suggestion-chips { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .chip { background: #238636; color: white; border: none; border-radius: 16px; padding: 4px 12px; font-size: 0.75em; cursor: pointer; transition: opacity 0.2s; }
+    .chip:hover { opacity: 0.8; }
+    /* Avatar Emotions */
+    .avatar-happy { color: #2ea043 !important; }
+    .avatar-concerned { color: #da3633 !important; }
+    .avatar-curious { color: #a371f7 !important; }
+</style>
 <body>
     <nav id="topnav"></nav>
     <div class="chat-container">
@@ -247,14 +288,51 @@
             }
 
             /* ── Chat Helpers ──────────────────────────────────── */
-            function appendMessage(who, text) {
+            function appendMessage(who, text, thought = null) {
                 const bubble = document.createElement("div");
                 bubble.className = `bubble ${who}`;
+                
+                // Glass Box: Show thought process if available (only for Jeebs)
+                if (who === "jeebs" && thought) {
+                    const details = document.createElement("details");
+                    details.className = "thought-process";
+                    const summary = document.createElement("summary");
+                    summary.className = "thought-summary";
+                    summary.innerHTML = "<span>🧠 Thought Process</span>";
+                    const content = document.createElement("div");
+                    content.className = "thought-content";
+                    content.textContent = thought.internal_monologue;
+                    details.appendChild(summary);
+                    details.appendChild(content);
+                    bubble.appendChild(details);
+
+                    // Emotional Avatar Update
+                    updateAvatarEmotion(thought);
+                }
+
                 const label = document.createElement("small");
                 label.textContent = who === "user" ? "You" : "JeebsAI";
                 const body = document.createElement("div");
                 body.textContent = text;
                 bubble.append(label, body);
+
+                // Contextual Chips: Suggest follow-ups based on new concepts
+                if (who === "jeebs" && thought && thought.new_concepts && thought.new_concepts.length > 0) {
+                    const chipsDiv = document.createElement("div");
+                    chipsDiv.className = "suggestion-chips";
+                    thought.new_concepts.forEach(concept => {
+                        const chip = document.createElement("button");
+                        chip.className = "chip";
+                        chip.textContent = `Ask about ${concept}`;
+                        chip.onclick = () => {
+                            promptInput.value = `What can you tell me about ${concept}?`;
+                            document.getElementById("chatForm").dispatchEvent(new Event('submit'));
+                        };
+                        chipsDiv.appendChild(chip);
+                    });
+                    bubble.appendChild(chipsDiv);
+                }
+
                 chatFeed.appendChild(bubble);
                 chatFeed.scrollTop = chatFeed.scrollHeight;
             }
@@ -271,6 +349,22 @@
             function hideTyping() {
                 const indicator = document.getElementById("typingIndicator");
                 if (indicator) indicator.remove();
+            }
+
+            function updateAvatarEmotion(thought) {
+                const avatar = document.querySelector(".chat-avatar");
+                if (!avatar) return;
+                
+                // Reset classes
+                avatar.classList.remove("avatar-happy", "avatar-concerned", "avatar-curious");
+                
+                if (thought.detected_sentiment > 0.5) {
+                    avatar.classList.add("avatar-happy");
+                } else if (thought.detected_sentiment < -0.5) {
+                    avatar.classList.add("avatar-concerned");
+                } else if (thought.curiosity_target) {
+                    avatar.classList.add("avatar-curious");
+                }
             }
 
             /* ── Request Helper ────────────────────────────────── */
@@ -441,7 +535,7 @@
                         body: JSON.stringify({ prompt: prompt }),
                     });
                     hideTyping();
-                    appendMessage("jeebs", data.response || "(No response body)");
+                    appendMessage("jeebs", data.response || "(No response body)", data.thought);
                 } catch (error) {
                     hideTyping();
                     appendMessage("jeebs", `Error: ${error.message}`);

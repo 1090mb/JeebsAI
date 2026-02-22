@@ -1,8 +1,8 @@
 name: Deploy to VPS
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -37,12 +37,47 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
+      - name: Create VERSION file from release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # Prefer the release tag from the event. Fallback to GITHUB_REF suffix if missing (e.g., when manually dispatched).
+          if [ -n "$RELEASE_TAG" ]; then
+            TAG="$RELEASE_TAG"
+          else
+            TAG="${GITHUB_REF##*/}"
+          fi
+          echo "$TAG" > VERSION
+          echo "Created VERSION: $(cat VERSION)"
+          ls -lh target/release/jeebs VERSION || true
+
+      - name: Add SSH key to agent
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload binary and VERSION to VPS via scp
+        env:
+          TARGET: ${{ secrets.VPS_TARGET }}
+        run: |
+          if [ -z "$TARGET" ]; then TARGET="/root/JeebsAI"; fi
+          mkdir -p target/release
+          echo "Uploading binary and VERSION to ${TARGET} on ${VPS_HOST}..."
+          scp -o StrictHostKeyChecking=yes -P "${{ secrets.VPS_PORT }}" target/release/jeebs "${{ secrets.VPS_USER }}"@"${{ secrets.VPS_HOST }}":"$TARGET/target/release/jeebs"
+          scp -o StrictHostKeyChecking=yes -P "${{ secrets.VPS_PORT }}" VERSION "${{ secrets.VPS_USER }}"@"${{ secrets.VPS_HOST }}":"$TARGET/VERSION"
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
-          password: ${{ secrets.VPS_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.VPS_PORT }}
           command_timeout: 30m
           script: |
@@ -82,9 +117,13 @@ jobs:
               git reset --hard origin/main
             fi
 
-            # Build release
-            echo "Building release binary on VPS..."
-            cargo build --release
+            # Use uploaded binary (copied from runner). Make sure it's executable.
+            if [ ! -f "$TARGET/target/release/jeebs" ]; then
+              echo "Uploaded binary not found at $TARGET/target/release/jeebs"
+              ls -la "$TARGET" || true
+              exit 1
+            fi
+            chmod +x "$TARGET/target/release/jeebs"
 
             # Ensure DB exists
             [ -f "$TARGET/jeebs.db" ] || touch "$TARGET/jeebs.db"

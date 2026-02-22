@@ -15,9 +15,10 @@ pub struct UserInfo {
 
 #[get("/api/admin/users")]
 pub async fn admin_list_users(data: web::Data<AppState>, session: Session) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    let is_admin = session.get::<bool>("is_admin").unwrap_or(Ok(false)).unwrap_or(false);
+    if !is_admin {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin privileges required"}));
     }
 
     let rows = sqlx::query("SELECT key, value FROM jeebs_store WHERE key LIKE 'user:%'")
@@ -32,7 +33,7 @@ pub async fn admin_list_users(data: web::Data<AppState>, session: Session) -> im
         if let Ok(user_json) = serde_json::from_slice::<serde_json::Value>(&val) {
             let username = key.strip_prefix("user:").unwrap_or(&key).to_string();
             let email = user_json["email"].as_str().unwrap_or("").to_string();
-            let role = user_json["role"].as_str().unwrap_or("user").to_string();
+            let role = user_json["role"].as_str().unwrap_or("Reguser").to_string();
             let username = username.clone();
             let is_admin = crate::auth::is_admin_role(&role) || username == crate::auth::ROOT_ADMIN_USERNAME;
             users.push(UserInfo {
@@ -137,9 +138,9 @@ pub async fn admin_update_user_role(
         return HttpResponse::BadRequest().json(json!({"error": "Only root admin can hold admin role"}));
     }
 
-    if req.role != "user" && req.role != "trainer" {
+    if !["Reguser", "Trainer", "Mod"].contains(&req.role.as_str()) {
         return HttpResponse::BadRequest()
-            .json(json!({"error": "Role must be 'user' or 'trainer'"}));
+            .json(json!({"error": "Role must be 'Reguser', 'Trainer', or 'Mod'"}));
     }
 
     let user_key = format!("user:{}", req.username);

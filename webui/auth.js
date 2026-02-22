@@ -7,7 +7,7 @@
  *  - authHeaders()        — returns headers with Bearer token
  *  - safeFetch(url, opts) — fetch wrapper (no rate-limit retry)
  *  - requireAuth(role)    — guard: redirects to /webui/index.html if not authorised
- *  - getAuthState()       — returns { loggedIn, username, isAdmin, isTrainer }
+ *  - getAuthState()       — returns { loggedIn, username, isAdmin, isTrainer, role }
  *  - logout()             — clears token and redirects
  */
 
@@ -56,28 +56,32 @@ async function getAuthState() {
             headers: authHeaders(),
             credentials: "same-origin",
         });
-        if (!res.ok) return { loggedIn: false, username: "", isAdmin: false, isTrainer: false };
+        if (!res.ok) return { loggedIn: false, username: "", isAdmin: false, isTrainer: false, role: "Guest" };
         const data = await res.json();
         if (data.token) jeebsSetToken(data.token);
             // Root admin override: always treat JEEBS_ROOT_ADMIN as admin+trainer
             const username = data.username || "";
+            let role = data.role || "Reguser";
             let isAdmin = !!data.is_admin;
             let isTrainer = !!data.is_trainer;
             if (typeof JEEBS_ROOT_ADMIN !== 'undefined' && username === JEEBS_ROOT_ADMIN) {
                 isAdmin = true;
                 isTrainer = true;
+                role = "Admin";
                 // persist flags for other scripts (nav.js etc.)
                 localStorage.setItem('jeebs_is_admin', 'true');
                 localStorage.setItem('jeebs_username', username);
+                localStorage.setItem('jeebs_role', role);
             }
             return {
                 loggedIn: !!data.logged_in,
                 username: username,
                 isAdmin: isAdmin,
                 isTrainer: isTrainer,
+                role: role,
             };
     } catch (_) {
-        return { loggedIn: false, username: "", isAdmin: false, isTrainer: false };
+        return { loggedIn: false, username: "", isAdmin: false, isTrainer: false, role: "Guest" };
     }
 }
 

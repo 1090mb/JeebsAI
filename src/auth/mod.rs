@@ -33,7 +33,7 @@ pub async fn ensure_root_admin(db: &SqlitePool) {
     let user_key = format!("user:{ROOT_ADMIN_USERNAME}");
     let pgp_key = pgp::ROOT_ADMIN_PGP_KEY;
 
-    let existing = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
+    let existing = sqlx::query("SELECT value FROM jeebs_store WHERE `key` = ?")
         .bind(&user_key)
         .fetch_optional(db)
         .await
@@ -62,7 +62,7 @@ pub async fn ensure_root_admin(db: &SqlitePool) {
     };
 
     let bytes = serde_json::to_vec(&user_json).expect("serialize root admin");
-    sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+    sqlx::query("REPLACE INTO jeebs_store (`key`, `value`) VALUES (?, ?)")
         .bind(&user_key)
         .bind(bytes)
         .execute(db)
@@ -237,7 +237,7 @@ async fn handle_pgp_login(
     }
 
     let user_key = format!("user:{username}");
-    let row = match sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
+    let row = match sqlx::query("SELECT value FROM jeebs_store WHERE `key` = ?")
         .bind(&user_key)
         .fetch_optional(&data.db)
         .await
@@ -420,7 +420,7 @@ pub async fn register(
     }
 
     let user_key = format!("user:{username}");
-    match sqlx::query("SELECT 1 FROM jeebs_store WHERE key = ?")
+    match sqlx::query("SELECT 1 FROM jeebs_store WHERE `key` = ?")
         .bind(&user_key)
         .fetch_optional(&data.db)
         .await
@@ -463,7 +463,7 @@ pub async fn register(
         }
     };
 
-    if sqlx::query("INSERT INTO jeebs_store (key, value) VALUES (?, ?)")
+    if sqlx::query("INSERT INTO jeebs_store (`key`, `value`) VALUES (?, ?)")
         .bind(&user_key)
         .bind(user_bytes)
         .execute(&data.db)
@@ -576,7 +576,7 @@ pub async fn change_username(
 
     let new_key = format!("user:{}", new_un);
     // Check uniqueness
-    if let Ok(Some(_)) = sqlx::query("SELECT 1 FROM jeebs_store WHERE key = ?")
+    if let Ok(Some(_)) = sqlx::query("SELECT 1 FROM jeebs_store WHERE `key` = ?")
         .bind(&new_key)
         .fetch_optional(&data.db)
         .await
@@ -587,7 +587,7 @@ pub async fn change_username(
     let old_key = format!("user:{}", current);
 
     // Read the existing user record from the DB
-    let row = match sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
+    let row = match sqlx::query("SELECT value FROM jeebs_store WHERE `key` = ?")
         .bind(&old_key)
         .fetch_optional(&data.db)
         .await
@@ -608,7 +608,7 @@ pub async fn change_username(
 
     user_json["username"] = serde_json::Value::String(new_un.to_string());
 
-    if let Err(_) = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+    if let Err(_) = sqlx::query("REPLACE INTO jeebs_store (`key`, `value`) VALUES (?, ?)")
         .bind(&new_key)
         .bind(serde_json::to_vec(&user_json).unwrap())
         .execute(&data.db)
@@ -617,7 +617,7 @@ pub async fn change_username(
         return HttpResponse::InternalServerError().json(serde_json::json!({"error": "Failed to save new user record"}));
     }
 
-    if let Err(_) = sqlx::query("DELETE FROM jeebs_store WHERE key = ?")
+    if let Err(_) = sqlx::query("DELETE FROM jeebs_store WHERE `key` = ?")
         .bind(&old_key)
         .execute(&data.db)
         .await
@@ -668,7 +668,7 @@ pub async fn auth_status(
                 .and_then(|s| s.strip_prefix("Bearer "))
                 .map(|s| s.to_string());
 
-            let role = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
+            let role = sqlx::query("SELECT value FROM jeebs_store WHERE `key` = ?")
                 .bind(format!("user:{}", claims.username))
                 .fetch_optional(&data.db)
                 .await

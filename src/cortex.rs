@@ -2557,6 +2557,23 @@ impl Cortex {
             },
         };
 
+        // 🧠 AUTONOMOUS CURIOSITY: If Jeebs is curious, trigger background research
+        if let Some(target) = &thought.curiosity_target {
+            let internet_enabled = *state.internet_enabled.read().unwrap();
+            if internet_enabled {
+                let db_clone = db.clone();
+                let target_clone = target.clone();
+                actix_web::rt::spawn(async move {
+                    let client = reqwest::Client::new();
+                    if let Ok(docs) = crate::cortex::query_wikipedia_docs(&client, &target_clone, 1).await {
+                        for doc in docs {
+                            let _ = crate::cortex::store_external_learning_doc(&db_clone, &doc).await;
+                        }
+                    }
+                });
+            }
+        }
+
         // Store thought for real-time UI visualization
         let thought_key = format!("chat:thought:{}", user_id);
         if let Ok(json) = serde_json::to_string(&thought) {
