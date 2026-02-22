@@ -2,6 +2,7 @@ pub mod admin;
 pub mod auth;
 pub mod chat;
 pub mod cli;
+pub mod content_extractor;
 pub mod cortex;
 pub mod data_synthesis;
 pub mod evolution;
