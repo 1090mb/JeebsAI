@@ -178,6 +178,54 @@ pub async fn user_chat(
     )
     .await;
 
+    // Google learning command for all authenticated users (requires internet enabled)
+    if let Some(query) = message.strip_prefix(".google").map(|s| s.trim()) {
+        if query.is_empty() {
+            return HttpResponse::BadRequest().json(json!({
+                "error": "Usage: .google <your query>"
+            }));
+        }
+
+        if !*data.internet_enabled.read().unwrap() {
+            return HttpResponse::Forbidden().json(json!({
+                "error": "Internet is disabled. Enable it in admin settings first."
+            }));
+        }
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(12))
+            .user_agent("JeebsAI-Google/1.0")
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
+        match crate::question_learning::google_learn_and_store(&data.db, &client, query).await {
+            Ok(summary) => {
+                crate::logging::log(
+                    &data.db,
+                    "INFO",
+                    "GOOGLE",
+                    &format!("Google learned query='{}' by username={}", query, username),
+                )
+                .await;
+
+                return HttpResponse::Ok().json(UserChatResponse {
+                    response: format!(
+                        "🔎 **Google Summary for** `{}`:\n\n{}\n\n✅ Stored in Jeebs brain for future recall.",
+                        query, summary
+                    ),
+                    username,
+                    is_admin,
+                    is_trainer,
+                });
+            }
+            Err(err) => {
+                return HttpResponse::InternalServerError().json(json!({
+                    "error": err
+                }));
+            }
+        }
+    }
+
     // Trainer commands: allow trainer group to trigger training focus
     if is_admin || is_trainer {
         if message.eq_ignore_ascii_case("train help") {

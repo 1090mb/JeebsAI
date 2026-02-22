@@ -4,6 +4,8 @@ use serde_json::json;
 use sqlx::{Row, SqlitePool};
 use std::collections::HashSet;
 
+use crate::content_extractor;
+
 /// Represents a question-answer pair that Jeebs has learned
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LearnedQA {
@@ -232,6 +234,91 @@ pub async fn ask_web_question(
     let answer = extract_answer_from_html(&html, question);
 
     Ok((question.to_string(), answer))
+}
+
+/// Run a Google search, extract meaningful text, store it, and return a summary.
+pub async fn google_learn_and_store(
+    db: &SqlitePool,
+    client: &reqwest::Client,
+    query: &str,
+) -> Result<String, String> {
+    let search_query = urlencoding::encode(query);
+    let search_url = format!("https://www.google.com/search?q={}", search_query);
+
+    let response = client
+        .get(&search_url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
+        .send()
+        .await
+        .map_err(|e| format!("Failed to search: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Search failed with status: {}", response.status()));
+    }
+
+    let html = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    let extracted_text = content_extractor::strip_html_extract_text(&html);
+    if extracted_text.is_empty() {
+        return Err("No meaningful content extracted from search results.".to_string());
+    }
+
+    let summary = content_extractor::create_summary(&extracted_text, 800);
+    let links = content_extractor::extract_links(&html);
+    let metadata = content_extractor::extract_metadata(&html);
+
+    let node_id = format!(
+        "google:{}",
+        blake3::hash(format!("{}:{}", query, Local::now().to_rfc3339()).as_bytes()).to_hex()
+    );
+
+    let payload = serde_json::to_vec(&json!({
+        "type": "google_search",
+        "query": query,
+        "source_url": search_url,
+        "title": metadata.title,
+        "description": metadata.description,
+        "headings": metadata.headings,
+        "keywords": metadata.keywords,
+        "links": links,
+        "content": extracted_text,
+        "summary": summary,
+        "learned_at": Local::now().to_rfc3339(),
+    }))
+    .unwrap_or_default();
+
+    sqlx::query(
+        "INSERT OR REPLACE INTO brain_nodes (id, label, summary, data, created_at)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(&node_id)
+    .bind(format!("Google Search: {}", query))
+    .bind(summary.clone())
+    .bind(payload)
+    .bind(Local::now().to_rfc3339())
+    .execute(db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let _ = sqlx::query(
+        "INSERT OR REPLACE INTO knowledge_triples (subject, predicate, object, confidence, created_at)
+         VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(query)
+    .bind("google_summary")
+    .bind(summary.clone())
+    .bind(0.7_f64)
+    .bind(Local::now().to_rfc3339())
+    .execute(db)
+    .await;
+
+    Ok(summary)
 }
 
 /// Extract answer from Google search results HTML
