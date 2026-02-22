@@ -16,8 +16,9 @@ use std::time::Duration;
 const UPDATE_KEY_PREFIX: &str = "evolution:update:";
 const NOTIFICATION_KEY_PREFIX: &str = "notification:";
 const STATE_KEY: &str = "evolution:runtime:state";
-const DEFAULT_THINK_INTERVAL_SECS: u64 = 300;
-const DEFAULT_MIN_PROPOSAL_INTERVAL_SECS: i64 = 900;
+// Faster autonomous thinking cycles so proposals surface sooner (still require manual approval)
+const DEFAULT_THINK_INTERVAL_SECS: u64 = 120;
+const DEFAULT_MIN_PROPOSAL_INTERVAL_SECS: i64 = 300;
 const MAX_PENDING_UPDATES: usize = 12;
 const MAX_CHANGE_BYTES: usize = 200_000;
 const MAX_TOTAL_CHANGE_BYTES: usize = 1_000_000;

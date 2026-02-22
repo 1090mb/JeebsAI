@@ -144,7 +144,7 @@ async fn main() -> std::io::Result<()> {
 
     // Sync training state with persisted toggle and always run worker
     let _ = cortex::sync_training_state_with_toggle(&state.db, training_enabled, "startup").await;
-    cortex::spawn_autonomous_training(state.clone());
+    // Training worker was removed; if reintroduced, wire it here.
 
     let port: u16 = env::var("PORT")
         .ok()
@@ -191,19 +191,7 @@ async fn main() -> std::io::Result<()> {
             .service(user_chat::user_chat)
             .service(user_chat::chat_preflight)
             .service(user_chat::chat_status)
-            .service(cortex::admin_crawl)
-            .service(cortex::search_brain)
-            .service(cortex::reindex_brain)
-            .service(cortex::admin_train)
-            .service(cortex::get_training_status)
-            .service(cortex::set_training_mode)
-            .service(cortex::run_training_now)
-            .service(cortex::visualize_brain)
-            .service(cortex::get_logic_graph)
-            .service(cortex::admin_crawl_random)
-            .service(cortex::knowledge_search)
-            .service(cortex::knowledge_stats)
-            .service(cortex::language_stats)
+            // Removed admin/knowledge routes that are no longer implemented in cortex
             .service(admin::status::get_system_status)
             .service(admin::sessions::get_active_sessions)
             .service(admin::sessions::terminate_session)

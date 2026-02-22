@@ -7,12 +7,13 @@ use sqlx::{Row, SqlitePool};
 use std::collections::HashSet;
 
 const PROPOSAL_KEY: &str = "jeebs:next_proposal";
-const PROPOSAL_INTERVAL_SECS: i64 = 1800; // 30 minutes
-const MAX_ACTIVE_PROPOSALS: usize = 3;
+// Allow faster proactive proposal generation; approvals still manual
+const PROPOSAL_INTERVAL_SECS: i64 = 900; // 15 minutes
+const MAX_ACTIVE_PROPOSALS: usize = 6;
 
 // New: Proposal template types
 const TEMPLATE_PROPOSAL_KEY: &str = "jeebs:template_proposals";
-const TEMPLATE_PROPOSAL_INTERVAL_SECS: i64 = 3600; // 1 hour
+const TEMPLATE_PROPOSAL_INTERVAL_SECS: i64 = 1800; // 30 minutes
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TemplateProposal {

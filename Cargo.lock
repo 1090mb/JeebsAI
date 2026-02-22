@@ -2031,6 +2031,7 @@ dependencies = [
  "sysinfo",
  "tokio",
  "tokio-stream",
+ "urlencoding",
  "uuid",
  "zstd",
 ]
