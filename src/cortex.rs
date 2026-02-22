@@ -1836,3 +1836,330 @@ fn canonical_prompt_key(input: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+// ===== TEMPLATE PROPOSAL ENDPOINTS =====
+
+#[post("/api/brain/template-proposals/generate")]
+pub async fn generate_template_proposals_endpoint(
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::proposals::generate_template_proposals(&state.db).await {
+        Some(proposals) => {
+            let formatted = crate::proposals::format_template_proposals(&proposals);
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "proposals": proposals.proposals.iter().map(|p| {
+                    json!({
+                        "id": p.id,
+                        "type": p.template_type,
+                        "title": p.title,
+                        "description": p.description,
+                        "steps": p.implementation_steps,
+                        "impact": p.expected_impact,
+                        "difficulty": p.difficulty_level,
+                        "estimated_hours": p.estimated_time_hours,
+                        "status": p.status,
+                        "created_at": p.created_at,
+                    })
+                }).collect::<Vec<_>>(),
+                "message": formatted,
+                "selection_round": proposals.selection_round,
+            }))
+        }
+        None => HttpResponse::InternalServerError().json(json!({
+            "success": false,
+            "error": "Failed to generate template proposals"
+        })),
+    }
+}
+
+#[get("/api/brain/template-proposals")]
+pub async fn get_template_proposals_endpoint(
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::proposals::get_template_proposals(&state.db).await {
+        Some(proposals) => {
+            let formatted = crate::proposals::format_template_proposals(&proposals);
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "proposals": proposals.proposals.iter().map(|p| {
+                    json!({
+                        "id": p.id,
+                        "type": p.template_type,
+                        "title": p.title,
+                        "description": p.description,
+                        "steps": p.implementation_steps,
+                        "impact": p.expected_impact,
+                        "difficulty": p.difficulty_level,
+                        "estimated_hours": p.estimated_time_hours,
+                        "status": p.status,
+                        "created_at": p.created_at,
+                    })
+                }).collect::<Vec<_>>(),
+                "message": formatted,
+                "selection_round": proposals.selection_round,
+            }))
+        }
+        None => {
+            // No proposals yet, generate them
+            match crate::proposals::generate_template_proposals(&state.db).await {
+                Some(proposals) => {
+                    let formatted = crate::proposals::format_template_proposals(&proposals);
+                    HttpResponse::Ok().json(json!({
+                        "success": true,
+                        "proposals": proposals.proposals.iter().map(|p| {
+                            json!({
+                                "id": p.id,
+                                "type": p.template_type,
+                                "title": p.title,
+                                "description": p.description,
+                                "steps": p.implementation_steps,
+                                "impact": p.expected_impact,
+                                "difficulty": p.difficulty_level,
+                                "estimated_hours": p.estimated_time_hours,
+                                "status": p.status,
+                                "created_at": p.created_at,
+                            })
+                        }).collect::<Vec<_>>(),
+                        "message": formatted,
+                        "selection_round": proposals.selection_round,
+                    }))
+                }
+                None => HttpResponse::InternalServerError().json(json!({
+                    "success": false,
+                    "error": "Failed to generate template proposals"
+                })),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProposalStatusRequest {
+    pub proposal_id: String,
+    pub status: String,
+}
+
+#[post("/api/brain/template-proposals/update-status")]
+pub async fn update_proposal_status_endpoint(
+    req: web::Json<UpdateProposalStatusRequest>,
+    state: web::Data<AppState>,
+) -> impl Responder {
+    let valid_statuses = vec!["proposed", "accepted", "rejected", "in_progress", "completed"];
+
+    if !valid_statuses.contains(&req.status.as_str()) {
+        return HttpResponse::BadRequest().json(json!({
+            "success": false,
+            "error": "Invalid status. Valid options: proposed, accepted, rejected, in_progress, completed"
+        }));
+    }
+
+    if crate::proposals::update_template_proposal_status(&state.db, &req.proposal_id, &req.status).await {
+        HttpResponse::Ok().json(json!({
+            "success": true,
+            "message": format!("Proposal {} status updated to {}", req.proposal_id, req.status)
+        }))
+    } else {
+        HttpResponse::NotFound().json(json!({
+            "success": false,
+            "error": "Proposal not found"
+        }))
+    }
+}
+
+#[get("/api/brain/template-proposals/statistics")]
+pub async fn get_proposal_statistics_endpoint(
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::proposals::get_proposal_statistics(&state.db).await {
+        Some(stats) => HttpResponse::Ok().json(json!({
+            "success": true,
+            "statistics": stats
+        })),
+        None => HttpResponse::Ok().json(json!({
+            "success": true,
+            "statistics": {
+                "total_proposals": 0,
+                "accepted": 0,
+                "in_progress": 0,
+                "completed": 0,
+                "message": "No proposals generated yet"
+            }
+        })),
+    }
+}
+
+// ===== DEEP LEARNING ENDPOINTS =====
+
+#[derive(Debug, Deserialize)]
+pub struct StartDeepLearningRequest {
+    pub topic: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddFactRequest {
+    pub session_id: String,
+    pub fact: String,
+    pub source: String,
+    pub importance: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddProblemRequest {
+    pub session_id: String,
+    pub problem: String,
+    pub solution: String,
+    pub explanation: String,
+    pub difficulty: String,
+}
+
+#[post("/api/learning/start-deep-learning")]
+pub async fn start_deep_learning(
+    req: web::Json<StartDeepLearningRequest>,
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::deep_learning::start_deep_learning_session(&state.db, &req.topic).await {
+        Ok(session) => {
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "session_id": session.id,
+                "topic": session.topic,
+                "subtopics": session.subtopics,
+                "message": format!("Started deep learning session on: {}", session.topic)
+            }))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": e
+            }))
+        }
+    }
+}
+
+#[post("/api/learning/add-fact")]
+pub async fn add_learned_fact(
+    req: web::Json<AddFactRequest>,
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::deep_learning::add_learned_fact(
+        &state.db,
+        &req.session_id,
+        &req.fact,
+        &req.source,
+        req.importance.unwrap_or(0.7),
+    ).await {
+        Ok(_) => {
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "message": "Fact learned and stored"
+            }))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": e
+            }))
+        }
+    }
+}
+
+#[post("/api/learning/add-practice-problem")]
+pub async fn add_practice_problem(
+    req: web::Json<AddProblemRequest>,
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::deep_learning::add_practice_problem(
+        &state.db,
+        &req.session_id,
+        &req.problem,
+        &req.solution,
+        &req.explanation,
+        &req.difficulty,
+    ).await {
+        Ok(_) => {
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "message": "Practice problem added for deeper learning"
+            }))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": e
+            }))
+        }
+    }
+}
+
+#[get("/api/learning/sessions")]
+pub async fn get_learning_sessions(
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::deep_learning::get_all_learning_sessions(&state.db).await {
+        Ok(sessions) => {
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "sessions": sessions.iter().map(|s| {
+                    json!({
+                        "id": s.id,
+                        "topic": s.topic,
+                        "status": s.status,
+                        "depth_level": s.depth_level,
+                        "facts_learned": s.learned_facts.len(),
+                        "study_hours": s.study_hours,
+                        "confidence": s.confidence,
+                        "problems_added": s.practice_problems.len(),
+                    })
+                }).collect::<Vec<_>>(),
+                "total_sessions": sessions.len(),
+            }))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": e
+            }))
+        }
+    }
+}
+
+#[get("/api/learning/statistics")]
+pub async fn get_learning_statistics(
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::deep_learning::get_learning_stats(&state.db).await {
+        Ok(stats) => {
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "statistics": stats
+            }))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": e
+            }))
+        }
+    }
+}
+
+#[get("/api/learning/summary")]
+pub async fn get_learning_summary_endpoint(
+    state: web::Data<AppState>,
+) -> impl Responder {
+    match crate::knowledge_integration::get_learning_summary(&state.db).await {
+        Ok(summary) => {
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "summary": summary
+            }))
+        }
+        Err(e) => {
+            HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": e
+            }))
+        }
+    }
+}
