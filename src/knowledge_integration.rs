@@ -1,7 +1,7 @@
 // Knowledge Integration Module - Uses learned information in chat responses
 
 use sqlx::SqlitePool;
-use crate::{brain_shard, deep_learning, knowledge_retrieval};
+use crate::{deep_learning, knowledge_retrieval};
 
 #[derive(Debug, Clone)]
 struct LinkedInsight {
@@ -208,9 +208,6 @@ pub async fn enhance_response_with_knowledge(
     });
     let linked = build_linked_insights(&retrieval.items);
 
-    // Use brain shard link suggestions to enrich reasoning
-    let shard_links = brain_shard::suggest_links(50, 3).await;
-
     if context.relevant_learned_facts.is_empty() && context.expertise_areas.is_empty() {
         // Even if no learned facts, we might surface a connected insight
         if linked.is_empty() {
@@ -285,33 +282,6 @@ pub async fn enhance_response_with_knowledge(
         for link in linked.iter().take(3) {
             persist_link_if_new(db, &link.left, &link.right, 0.55).await;
         }
-    }
-
-    // Opportunistically store synthesized insight into the MySQL shard for cross-brain reuse
-    if !linked.is_empty() {
-        let summary = format!(
-            "Connected insights for '{}': {}",
-            user_message,
-            linked
-                .iter()
-                .map(|l| format!("{} ↔ {}", l.left, l.right))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        brain_shard::store_entry_global("connected_insight", &summary, "jeebs", &[]).await;
-    }
-
-    // Surface shard link hints in the response when available
-    if !shard_links.is_empty() {
-        let shard_points = shard_links
-            .iter()
-            .map(|(a, b, score)| format!("• {} ↔ {} (score {:.2})", a, b, score))
-            .collect::<Vec<_>>()
-            .join("\n");
-        enhanced.push_str(&format!(
-            "\n\n**Shard link suggestions:**\n{}",
-            shard_points
-        ));
     }
 
     Ok(enhanced)
