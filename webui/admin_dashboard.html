@@ -222,7 +222,7 @@
                 </div>
             </div>
 
-            <div class="grid cols-2" style="margin-bottom: 16px">
+            <div class="grid cols-3" style="margin-bottom: 16px">
                 <div class="card">
                     <h3>Trainer Roles</h3>
                     <div class="row" style="gap: 8px; margin-bottom: 8px; flex-wrap: wrap">
@@ -237,6 +237,11 @@
                 <div class="card">
                     <h3>Active Sessions</h3>
                     <div class="list" id="sessionsContent">Loading sessions...</div>
+                </div>
+
+                <div class="card">
+                    <h3>All Users</h3>
+                    <div class="list" id="usersContent">Loading users...</div>
                 </div>
             </div>
 
@@ -288,11 +293,21 @@
             const uptimePill = document.getElementById("uptimePill");
             const logsContent = document.getElementById("logsContent");
             const sessionsContent = document.getElementById("sessionsContent");
+            const usersContent = document.getElementById("usersContent");
             const trainerList = document.getElementById("trainerList");
             const trainerRoleStatus = document.getElementById("trainerRoleStatus");
             const intervalInfo = document.getElementById("intervalInfo");
             let logsInFlight = false;
             let lastLogsSignature = "";
+            const RATE_DELAY_MS = 1200; // space out admin calls to avoid rate limiting
+            let refreshBusy = false;
+            const AUTH_CHECK_INTERVAL = 45000;
+            let authGuardTimer = null;
+
+            function redirectToLogin() {
+                localStorage.removeItem(TOKEN_KEY);
+                window.location.replace("/webui/index.html");
+            }
 
             function authHeaders(json = false) {
                 const h = json ? { "Content-Type": "application/json" } : {};
@@ -301,25 +316,77 @@
                 return h;
             }
 
+            async function safeFetch(url, options = {}, retries = 1) {
+                const res = await fetch(url, options);
+                if (res.status === 429 && retries > 0) {
+                    await sleep(1100);
+                    return safeFetch(url, options, retries - 1);
+                }
+                return res;
+            }
+
+            function sleep(ms) {
+                return new Promise((resolve) => setTimeout(resolve, ms));
+            }
+
             async function ensureRootAdmin() {
                 const headers = authHeaders();
                 const res = await fetch("/api/auth/status", { headers, credentials: "same-origin" });
-                if (!res.ok) return false;
+                if (!res.ok) {
+                    rootAdminAuthorized = false;
+                    redirectToLogin();
+                    return false;
+                }
                 const auth = await res.json();
                 const ok = auth.logged_in && auth.is_admin && auth.username === ROOT_ADMIN_USERNAME;
-                return !!ok;
+                rootAdminAuthorized = !!ok;
+                if (!ok) {
+                    redirectToLogin();
+                    return false;
+                }
+                return true;
+            }
+
+            function startAuthGuard() {
+                if (authGuardTimer) return;
+                authGuardTimer = setInterval(() => {
+                    void ensureRootAdmin();
+                }, AUTH_CHECK_INTERVAL);
+
+                document.addEventListener("visibilitychange", () => {
+                    if (!document.hidden) void ensureRootAdmin();
+                });
+
+                window.addEventListener("storage", (event) => {
+                    if (event.key === TOKEN_KEY && !event.newValue) {
+                        redirectToLogin();
+                    }
+                });
             }
 
             function startAutoRefresh() {
                 if (refreshTimer) return;
                 refreshTimer = setInterval(() => {
-                    void loadStatus();
-                    void loadInternet();
-                    void loadTraining();
-                    void loadSessions();
-                    void loadTrainerList();
-                    void loadLogs();
-                }, 8000);
+                    void refreshAll();
+                }, 12000);
+            }
+
+            async function refreshAll() {
+                if (refreshBusy) return;
+                refreshBusy = true;
+                const tasks = [
+                    loadStatus,
+                    loadInternet,
+                    loadTraining,
+                    loadUsersData,
+                    loadSessions,
+                    loadLogs,
+                ];
+                for (const task of tasks) {
+                    await task();
+                    await sleep(RATE_DELAY_MS);
+                }
+                refreshBusy = false;
             }
 
             async function loadStatus() {
@@ -340,7 +407,7 @@
 
             async function loadInternet() {
                 try {
-                    const res = await fetch("/api/admin/internet/status", { headers: authHeaders() });
+                    const res = await safeFetch("/api/admin/internet/status", { headers: authHeaders() }, 2);
                     if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
                     const enabled = !!data.enabled;
@@ -364,11 +431,11 @@
                 }
                 const next = !current;
                 try {
-                    const res = await fetch("/api/admin/internet/set", {
+                    const res = await safeFetch("/api/admin/internet/set", {
                         method: "POST",
                         headers: authHeaders(true),
                         body: JSON.stringify({ enabled: next }),
-                    });
+                    }, 2);
                     if (!res.ok) throw new Error(await res.text());
                 } catch (err) {
                     alert(`Failed to toggle internet: ${err}`);
@@ -379,7 +446,7 @@
 
             async function loadTraining() {
                 try {
-                    const res = await fetch("/api/admin/training/status", { headers: authHeaders() });
+                    const res = await safeFetch("/api/admin/training/status", { headers: authHeaders() }, 2);
                     if (!res.ok) throw new Error(await res.text());
                     const data = await res.json();
                     const enabled = data.training?.enabled === true;
@@ -409,11 +476,11 @@
                 }
                 const next = !current;
                 try {
-                    const res = await fetch("/api/admin/training/mode", {
+                    const res = await safeFetch("/api/admin/training/mode", {
                         method: "POST",
                         headers: authHeaders(true),
                         body: JSON.stringify({ enabled: next }),
-                    });
+                    }, 2);
                     if (!res.ok) throw new Error(await res.text());
                 } catch (err) {
                     alert(`Failed to toggle training: ${err}`);
@@ -422,15 +489,40 @@
                 trainingToggleBtn.disabled = false;
             }
 
-            async function loadTrainerList() {
+            async function fetchUsers() {
+                const res = await safeFetch("/api/admin/users", { headers: authHeaders() }, 2);
+                if (!res.ok) throw new Error(await res.text());
+                return res.json();
+            }
+
+            function renderTrainerList(users) {
+                const trainers = users.filter((u) => u.role === "trainer").map((u) => u.username);
+                trainerList.textContent = trainers.length ? `Trainers: ${trainers.join(", ")}` : "No trainers assigned.";
+            }
+
+            function renderUsersList(users) {
+                if (!users.length) {
+                    usersContent.textContent = "No users found.";
+                    return;
+                }
+                usersContent.innerHTML = users
+                    .map(
+                        (u) => `<div class="row" style="justify-content: space-between; border-bottom: 1px solid var(--border); padding: 6px 2px;">
+                            <span><strong>${u.username}</strong></span>
+                            <span class="muted">${u.role || "user"}</span>
+                        </div>`
+                    )
+                    .join("");
+            }
+
+            async function loadUsersData() {
                 try {
-                    const res = await fetch("/api/admin/users", { headers: authHeaders() });
-                    if (!res.ok) throw new Error(await res.text());
-                    const users = await res.json();
-                    const trainers = users.filter((u) => u.role === "trainer").map((u) => u.username);
-                    trainerList.textContent = trainers.length ? `Trainers: ${trainers.join(", ")}` : "No trainers assigned.";
+                    const users = await fetchUsers();
+                    renderTrainerList(users);
+                    renderUsersList(users);
                 } catch (err) {
                     trainerList.textContent = `Trainer list error: ${err}`;
+                    usersContent.textContent = `Users error: ${err}`;
                 }
             }
 
@@ -449,7 +541,7 @@
                     });
                     if (!res.ok) throw new Error(await res.text());
                     trainerRoleStatus.textContent = `Role set: ${username} → ${role}`;
-                    await loadTrainerList();
+                    await loadUsersData();
                 } catch (err) {
                     trainerRoleStatus.textContent = `Failed: ${err}`;
                 }
@@ -493,7 +585,7 @@
                 if (logsInFlight) return;
                 logsInFlight = true;
                 try {
-                    const res = await fetch("/api/admin/logs", { headers: authHeaders() });
+                    const res = await safeFetch("/api/admin/logs", { headers: authHeaders() }, 2);
                     if (!res.ok) throw new Error(await res.text());
                     const logs = await res.json();
                     const ordered = logs.slice().reverse();
@@ -567,14 +659,7 @@
                 document.getElementById("refreshLogsBtn").addEventListener("click", () => void loadLogs());
                 wireImport();
 
-                await Promise.all([
-                    loadStatus(),
-                    loadInternet(),
-                    loadTraining(),
-                    loadTrainerList(),
-                    loadSessions(),
-                    loadLogs(),
-                ]);
+                await refreshAll();
 
                 startAutoRefresh();
             }
