@@ -28,7 +28,7 @@ warn() {
 }
 
 # Configuration (edit these as needed)
-VPS_HOST="${VPS_HOST:192.227.193.148}"
+VPS_HOST="${VPS_HOST:-192.227.193.148}"
 VPS_USER="${VPS_USER:-root}"
 VPS_APP_DIR="${VPS_APP_DIR:-/root/jeebs}"
 
