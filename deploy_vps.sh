@@ -13,6 +13,18 @@ echo "Dir:  $APP_DIR"
 echo "Port: $PORT"
 echo ""
 
+# ── 0. Pre-deploy validation ────────────────────────────────
+if [ -f "$APP_DIR/validate.sh" ]; then
+    echo "[0/7] Running pre-deploy validation..."
+    if ! bash "$APP_DIR/validate.sh"; then
+        echo ""
+        echo "ERROR: Validation failed. Fix the issues above before deploying."
+        echo "To force deploy anyway: SKIP_VALIDATE=1 bash deploy_vps.sh"
+        [ "${SKIP_VALIDATE:-}" = "1" ] || exit 1
+    fi
+    echo ""
+fi
+
 # ── 1. System dependencies ──────────────────────────────────
 echo "[1/7] Installing system dependencies..."
 apt-get update -qq
