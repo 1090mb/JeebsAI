@@ -76,30 +76,21 @@ pub async fn parse_brain_node(
 pub async fn build_brain_graph(
     state: web::Data<AppState>,
 ) -> impl Responder {
-    match state.db.as_ref() {
-        Some(db) => {
-            let parser = BrainParser::new();
-            match build_knowledge_graph(db, &parser).await {
-                Ok(graph) => {
-                    HttpResponse::Ok().json(json!({
-                        "success": true,
-                        "graph_stats": graph.to_json(),
-                        "node_count": graph.nodes.len(),
-                        "edge_count": graph.edges.len(),
-                    }))
-                },
-                Err(e) => {
-                    HttpResponse::InternalServerError().json(json!({
-                        "success": false,
-                        "error": e,
-                    }))
-                }
-            }
+    let db = &state.db;
+    let parser = BrainParser::new();
+    match build_knowledge_graph(db, &parser).await {
+        Ok(graph) => {
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "graph_stats": graph.to_json(),
+                "node_count": graph.nodes.len(),
+                "edge_count": graph.edges.len(),
+            }))
         },
-        None => {
+        Err(e) => {
             HttpResponse::InternalServerError().json(json!({
                 "success": false,
-                "error": "Database not available",
+                "error": e,
             }))
         }
     }
@@ -112,31 +103,22 @@ pub async fn query_graph_entity(
     state: web::Data<AppState>,
 ) -> impl Responder {
     if let Some(entity) = &req.entity {
-        match state.db.as_ref() {
-            Some(db) => {
-                let parser = BrainParser::new();
-                match build_knowledge_graph(db, &parser).await {
-                    Ok(graph) => {
-                        let results = graph.query_by_entity(entity);
-                        return HttpResponse::Ok().json(GraphQueryResponse {
-                            success: true,
-                            result_count: results.len(),
-                            results,
-                            query_type: "entity".to_string(),
-                        });
-                    },
-                    Err(e) => {
-                        return HttpResponse::InternalServerError().json(json!({
-                            "success": false,
-                            "error": e,
-                        }));
-                    }
-                }
+        let db = &state.db;
+        let parser = BrainParser::new();
+        match build_knowledge_graph(db, &parser).await {
+            Ok(graph) => {
+                let results = graph.query_by_entity(entity);
+                return HttpResponse::Ok().json(GraphQueryResponse {
+                    success: true,
+                    result_count: results.len(),
+                    results,
+                    query_type: "entity".to_string(),
+                });
             },
-            None => {
+            Err(e) => {
                 return HttpResponse::InternalServerError().json(json!({
                     "success": false,
-                    "error": "Database not available",
+                    "error": e,
                 }));
             }
         }
@@ -147,6 +129,7 @@ pub async fn query_graph_entity(
         "error": "entity parameter required",
     }))
 }
+}
 
 /// Query the knowledge graph by category
 #[post("/api/brain/graph/query/category")]
@@ -155,31 +138,22 @@ pub async fn query_graph_category(
     state: web::Data<AppState>,
 ) -> impl Responder {
     if let Some(category) = &req.category {
-        match state.db.as_ref() {
-            Some(db) => {
-                let parser = BrainParser::new();
-                match build_knowledge_graph(db, &parser).await {
-                    Ok(graph) => {
-                        let results = graph.query_by_category(category);
-                        return HttpResponse::Ok().json(GraphQueryResponse {
-                            success: true,
-                            result_count: results.len(),
-                            results,
-                            query_type: "category".to_string(),
-                        });
-                    },
-                    Err(e) => {
-                        return HttpResponse::InternalServerError().json(json!({
-                            "success": false,
-                            "error": e,
-                        }));
-                    }
-                }
+        let db = &state.db;
+        let parser = BrainParser::new();
+        match build_knowledge_graph(db, &parser).await {
+            Ok(graph) => {
+                let results = graph.query_by_category(category);
+                return HttpResponse::Ok().json(GraphQueryResponse {
+                    success: true,
+                    result_count: results.len(),
+                    results,
+                    query_type: "category".to_string(),
+                });
             },
-            None => {
+            Err(e) => {
                 return HttpResponse::InternalServerError().json(json!({
                     "success": false,
-                    "error": "Database not available",
+                    "error": e,
                 }));
             }
         }
@@ -196,44 +170,38 @@ pub async fn query_graph_category(
 pub async fn get_graph_statistics(
     state: web::Data<AppState>,
 ) -> impl Responder {
-    match state.db.as_ref() {
-        Some(db) => {
-            let parser = BrainParser::new();
-            match build_knowledge_graph(db, &parser).await {
-                Ok(graph) => {
-                    let mut nodes_summary = Vec::new();
+    let db = &state.db;
+    let parser = BrainParser::new();
+    match build_knowledge_graph(db, &parser).await {
+        Ok(graph) => {
+            let mut nodes_summary = Vec::new();
 
-                    for (id, node) in graph.nodes.iter() {
-                        nodes_summary.push(NodeSummary {
-                            id: id.clone(),
-                            key: node.content.original_key.clone(),
-                            entities_count: node.content.extracted_entities.len(),
-                            relationships_count: node.content.relationships.len(),
-                            categories: node.content.categories.iter().map(|c| c.name.clone()).collect(),
-                        });
-                    }
-
-                    HttpResponse::Ok().json(GraphStatisticsResponse {
-                        total_nodes: graph.nodes.len(),
-                        total_edges: graph.edges.len(),
-                        total_categories: graph.categories.len(),
-                        total_entities: graph.entity_index.len(),
-                        nodes: nodes_summary,
-                    })
-                },
-                Err(e) => {
-                    HttpResponse::InternalServerError().json(json!({
-                        "success": false,
-                        "error": e,
-                    }))
-                }
+            for (id, node) in graph.nodes.iter() {
+                nodes_summary.push(NodeSummary {
+                    id: id.clone(),
+                    key: node.content.original_key.clone(),
+                    entities_count: node.content.extracted_entities.len(),
+                    relationships_count: node.content.relationships.len(),
+                    categories: node.content.categories.iter().map(|c| c.name.clone()).collect(),
+                });
             }
+
+            HttpResponse::Ok().json(GraphStatisticsResponse {
+                total_nodes: graph.nodes.len(),
+                total_edges: graph.edges.len(),
+                total_categories: graph.categories.len(),
+                total_entities: graph.entity_index.len(),
+                nodes: nodes_summary,
+            })
         },
-        None => {
+        Err(e) => {
             HttpResponse::InternalServerError().json(json!({
                 "success": false,
-                "error": "Database not available",
+                "error": e,
             }))
+        }
+    }
+}
         }
     }
 }
@@ -243,44 +211,35 @@ pub async fn get_graph_statistics(
 pub async fn analyze_relationships(
     state: web::Data<AppState>,
 ) -> impl Responder {
-    match state.db.as_ref() {
-        Some(db) => {
-            let parser = BrainParser::new();
-            match build_knowledge_graph(db, &parser).await {
-                Ok(graph) => {
-                    // Collect all relationships
-                    let mut all_relationships = Vec::new();
+    let db = &state.db;
+    let parser = BrainParser::new();
+    match build_knowledge_graph(db, &parser).await {
+        Ok(graph) => {
+            // Collect all relationships
+            let mut all_relationships = Vec::new();
 
-                    for (_, node) in graph.nodes.iter() {
-                        for rel in &node.content.relationships {
-                            all_relationships.push(json!({
-                                "subject": rel.subject,
-                                "predicate": rel.predicate,
-                                "object": rel.object,
-                                "confidence": rel.confidence,
-                                "type": format!("{:?}", rel.relationship_type),
-                            }));
-                        }
-                    }
-
-                    HttpResponse::Ok().json(json!({
-                        "success": true,
-                        "total_relationships": all_relationships.len(),
-                        "relationships": all_relationships,
-                    }))
-                },
-                Err(e) => {
-                    HttpResponse::InternalServerError().json(json!({
-                        "success": false,
-                        "error": e,
-                    }))
+            for (_, node) in graph.nodes.iter() {
+                for rel in &node.content.relationships {
+                    all_relationships.push(json!({
+                        "subject": rel.subject,
+                        "predicate": rel.predicate,
+                        "object": rel.object,
+                        "confidence": rel.confidence,
+                        "type": format!("{:?}", rel.relationship_type),
+                    }));
                 }
             }
+
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "total_relationships": all_relationships.len(),
+                "relationships": all_relationships,
+            }))
         },
-        None => {
+        Err(e) => {
             HttpResponse::InternalServerError().json(json!({
                 "success": false,
-                "error": "Database not available",
+                "error": e,
             }))
         }
     }
@@ -291,45 +250,36 @@ pub async fn analyze_relationships(
 pub async fn get_entities_report(
     state: web::Data<AppState>,
 ) -> impl Responder {
-    match state.db.as_ref() {
-        Some(db) => {
-            let parser = BrainParser::new();
-            match build_knowledge_graph(db, &parser).await {
-                Ok(graph) => {
-                    // Group entities by type
-                    let mut entities_by_type = std::collections::HashMap::new();
+    let db = &state.db;
+    let parser = BrainParser::new();
+    match build_knowledge_graph(db, &parser).await {
+        Ok(graph) => {
+            // Group entities by type
+            let mut entities_by_type = std::collections::HashMap::new();
 
-                    for (_, node) in graph.nodes.iter() {
-                        for entity in &node.content.extracted_entities {
-                            let type_key = format!("{:?}", entity.entity_type);
-                            entities_by_type
-                                .entry(type_key)
-                                .or_insert_with(Vec::new)
-                                .push(json!({
-                                    "value": entity.value,
-                                    "confidence": entity.confidence,
-                                }));
-                        }
-                    }
-
-                    HttpResponse::Ok().json(json!({
-                        "success": true,
-                        "entities_by_type": entities_by_type,
-                        "total_entities": graph.entity_index.len(),
-                    }))
-                },
-                Err(e) => {
-                    HttpResponse::InternalServerError().json(json!({
-                        "success": false,
-                        "error": e,
-                    }))
+            for (_, node) in graph.nodes.iter() {
+                for entity in &node.content.extracted_entities {
+                    let type_key = format!("{:?}", entity.entity_type);
+                    entities_by_type
+                        .entry(type_key)
+                        .or_insert_with(Vec::new)
+                        .push(json!({
+                            "value": entity.value,
+                            "confidence": entity.confidence,
+                        }));
                 }
             }
+
+            HttpResponse::Ok().json(json!({
+                "success": true,
+                "entities_by_type": entities_by_type,
+                "total_entities": graph.entity_index.len(),
+            }))
         },
-        None => {
+        Err(e) => {
             HttpResponse::InternalServerError().json(json!({
                 "success": false,
-                "error": "Database not available",
+                "error": e,
             }))
         }
     }
