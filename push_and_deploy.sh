@@ -28,9 +28,9 @@ warn() {
 }
 
 # Configuration (edit these as needed)
-VPS_HOST="${VPS_HOST:-your-vps-hostname-or-ip}"
+VPS_HOST="${VPS_HOST:192.227.193.148}"
 VPS_USER="${VPS_USER:-root}"
-VPS_APP_DIR="${VPS_APP_DIR:-/opt/jeebs}"
+VPS_APP_DIR="${VPS_APP_DIR:-/root/jeebs}"
 
 # Step 1: Check git status
 info "Checking git status..."
