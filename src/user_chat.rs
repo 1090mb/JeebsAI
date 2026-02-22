@@ -373,7 +373,6 @@ pub async fn user_chat(
     // Get response from Jeebs
     let response = crate::cortex::Cortex::think(message, &data)
         .await;
-    .await;
 
     logging::log(
         &data.db,

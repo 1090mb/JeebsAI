@@ -339,7 +339,7 @@ impl BrainParser {
 
                 let subcategories = topics
                     .iter()
-                    .filter(|topic: &&String| !categories.iter().any(|c| &c.name == *topic))
+                    .filter(|topic: &&String| !categories.iter().any(|c: &Category| &c.name == *topic))
                     .take(3)
                     .cloned()
                     .collect();

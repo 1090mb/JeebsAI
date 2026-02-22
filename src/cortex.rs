@@ -5,6 +5,7 @@ use serde_json::json;
 use sqlx::{Row, SqlitePool};
 use std::collections::{HashMap, HashSet};
 use std::env;
+use std::time::Instant;
 
 use crate::state::AppState;
 use crate::utils::decode_all;
