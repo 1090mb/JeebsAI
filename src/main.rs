@@ -5,7 +5,7 @@ use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::cookie::Key;
 use actix_web::dev::ServiceRequest;
 use actix_web::{web, App, HttpServer};
-use jeebs::{admin, auth, chat, cortex, evolution, logging, AppState};
+use jeebs::{admin, auth, chat, cortex, evolution, logging, brain_parsing_api, AppState};
 use jeebs::plugins::{
     Base64Plugin, CalcPlugin, ContactPlugin, ErrorPlugin, HashPlugin, LogicPlugin, MemoryPlugin,
     NewsPlugin, PasswordPlugin, SummaryPlugin, SystemPlugin, TimePlugin, TodoPlugin,
@@ -236,6 +236,13 @@ async fn main() -> std::io::Result<()> {
             .service(evolution::get_notifications)
             .service(evolution::dismiss_notification)
             .service(evolution::brainstorm_update)
+            .service(brain_parsing_api::parse_brain_node)
+            .service(brain_parsing_api::build_brain_graph)
+            .service(brain_parsing_api::query_graph_entity)
+            .service(brain_parsing_api::query_graph_category)
+            .service(brain_parsing_api::get_graph_statistics)
+            .service(brain_parsing_api::analyze_relationships)
+            .service(brain_parsing_api::get_entities_report)
             .service(Files::new("/webui", "./webui").index_file("index.html"))
             .service(Files::new("/", "./webui").index_file("index.html"))
     })

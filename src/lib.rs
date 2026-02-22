@@ -1,5 +1,8 @@
 pub mod admin;
 pub mod auth;
+pub mod brain;
+pub mod brain_parser;
+pub mod brain_parsing_api;
 pub mod chat;
 pub mod cli;
 pub mod content_extractor;
