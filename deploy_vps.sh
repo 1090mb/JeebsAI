@@ -71,8 +71,19 @@ fi
 
 # ── 4. Build release binary ─────────────────────────────────
 echo "[4/7] Building release binary (this may take 5-15 minutes on first build)..."
+echo "       Compiling with $(nproc 2>/dev/null || echo '?') CPU core(s), $(free -m 2>/dev/null | awk '/Mem:/{print $2}' || echo '?')MB RAM, $(free -m 2>/dev/null | awk '/Swap:/{print $2}' || echo '?')MB swap"
+echo ""
 cd "$APP_DIR"
-CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)} cargo build --release 2>&1 | tail -10
+CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$(nproc 2>/dev/null || echo 1)} cargo build --release 2>&1 | while IFS= read -r line; do
+    # Show Compiling/Downloading/Finished lines live, skip warnings
+    case "$line" in
+        *Compiling*) echo "  ⚙  $line" ;;
+        *Downloading*) echo "  ↓  $line" ;;
+        *Finished*) echo "  ✓  $line" ;;
+        *error*) echo "  ✗  $line" ;;
+        *Downloaded*) echo "  ↓  $line" ;;
+    esac
+done
 if [ ! -f "$APP_DIR/target/release/jeebs" ]; then
     echo "ERROR: Build failed — binary not found."
     echo "Check: free -m  (need ~1.5GB RAM+swap)"
