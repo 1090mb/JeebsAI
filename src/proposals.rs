@@ -5,6 +5,7 @@ use sqlx::{Row, SqlitePool};
 
 const PROPOSAL_KEY: &str = "jeebs:next_proposal";
 const PROPOSAL_INTERVAL_SECS: i64 = 1800; // 30 minutes
+const MAX_ACTIVE_PROPOSALS: usize = 3;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ProactiveProposal {
@@ -12,6 +13,52 @@ pub struct ProactiveProposal {
     pub description: String,
     pub reason: String,
     pub created_at: String,
+}
+
+fn base_action_type(action_type: &str) -> &str {
+    if let Some(stripped) = action_type.strip_prefix("insight_") {
+        if stripped.is_empty() {
+            "insight"
+        } else {
+            "insight"
+        }
+    } else {
+        action_type
+    }
+}
+
+async fn load_proposals(db: &SqlitePool) -> Vec<ProactiveProposal> {
+    let row = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
+        .bind(PROPOSAL_KEY)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten();
+
+    let Some(row) = row else {
+        return Vec::new();
+    };
+
+    let value: Vec<u8> = row.get(0);
+    if let Ok(list) = serde_json::from_slice::<Vec<ProactiveProposal>>(&value) {
+        return list;
+    }
+
+    if let Ok(single) = serde_json::from_slice::<ProactiveProposal>(&value) {
+        return vec![single];
+    }
+
+    Vec::new()
+}
+
+async fn save_proposals(db: &SqlitePool, proposals: &[ProactiveProposal]) {
+    if let Ok(payload) = serde_json::to_vec(proposals) {
+        let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+            .bind(PROPOSAL_KEY)
+            .bind(&payload)
+            .execute(db)
+            .await;
+    }
 }
 
 /// Actions Jeebs wants to propose
@@ -68,33 +115,41 @@ const EXPERIMENTS: &[&str] = &[
 ];
 
 pub async fn should_propose_action(db: &SqlitePool) -> bool {
-    let row = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
-        .bind(PROPOSAL_KEY)
-        .fetch_optional(db)
-        .await
-        .ok()
-        .flatten();
-
-    if let Some(row) = row {
-        let value: Vec<u8> = row.get(0);
-        if let Ok(proposal) = serde_json::from_slice::<ProactiveProposal>(&value) {
-            let created = chrono::DateTime::parse_from_rfc3339(&proposal.created_at)
-                .ok()
-                .map(|dt| dt.with_timezone(&chrono::Local));
-
-            if let Some(created) = created {
-                let elapsed = (Local::now() - created).num_seconds();
-                return elapsed >= PROPOSAL_INTERVAL_SECS;
-            }
-        }
+    let proposals = load_proposals(db).await;
+    if proposals.len() >= MAX_ACTIVE_PROPOSALS {
+        return false;
     }
 
-    true // No previous proposal or error parsing, so we can propose
+    let newest_created = proposals
+        .iter()
+        .filter_map(|proposal| {
+            chrono::DateTime::parse_from_rfc3339(&proposal.created_at)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Local))
+        })
+        .max();
+
+    if let Some(created) = newest_created {
+        let elapsed = (Local::now() - created).num_seconds();
+        return elapsed >= PROPOSAL_INTERVAL_SECS;
+    }
+
+    true
 }
 
 pub async fn generate_proactive_proposal(db: &SqlitePool) -> Option<ProactiveProposal> {
     if !should_propose_action(db).await {
         return None;
+    }
+
+    let mut proposals = load_proposals(db).await;
+    if proposals.len() >= MAX_ACTIVE_PROPOSALS {
+        return None;
+    }
+
+    let mut existing_types = std::collections::HashSet::new();
+    for proposal in &proposals {
+        existing_types.insert(base_action_type(&proposal.action_type).to_string());
     }
 
     // Check if there are pending evolution updates
@@ -109,28 +164,34 @@ pub async fn generate_proactive_proposal(db: &SqlitePool) -> Option<ProactivePro
     .unwrap_or(0);
 
     // Try to generate insight-based proposals first (based on learned data)
-    if (Local::now().timestamp() % 5) == 0 {
+    if (Local::now().timestamp() % 5) == 0 && !existing_types.contains("insight") {
         if let Ok(insight_proposals) = crate::data_synthesis::generate_insight_proposals(db).await {
             if let Some(insight) = insight_proposals.first() {
-                return Some(ProactiveProposal {
+                let proposal = ProactiveProposal {
                     action_type: format!("insight_{}", insight.proposal_type),
                     description: insight.title.clone(),
                     reason: insight.description.clone(),
                     created_at: Local::now().to_rfc3339(),
-                });
+                };
+                proposals.push(proposal.clone());
+                save_proposals(db, &proposals).await;
+                return Some(proposal);
             }
         }
     }
 
-    // Determine which type of action to propose
-    let action_type = if pending_count > 0 && (Local::now().timestamp() % 4) == 0 {
-        "evolution"
-    } else {
-        match (Local::now().timestamp() % 3) {
-            0 => "learn",
-            1 => "feature",
-            _ => "experiment",
-        }
+    // Determine which type of action to propose (avoid duplicates)
+    let mut candidate_types = Vec::new();
+    if pending_count > 0 {
+        candidate_types.push("evolution");
+    }
+    candidate_types.extend(["learn", "feature", "experiment"].iter().copied());
+
+    let action_type = candidate_types
+        .into_iter()
+        .find(|candidate| !existing_types.contains(*candidate));
+    let Some(action_type) = action_type else {
+        return None;
     };
 
     let proposal = match action_type {
@@ -195,13 +256,11 @@ pub async fn generate_proactive_proposal(db: &SqlitePool) -> Option<ProactivePro
         _ => return None,
     };
 
-    // Save the proposal
-    let payload = serde_json::to_vec(&proposal).ok()?;
-    let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
-        .bind(PROPOSAL_KEY)
-        .bind(&payload)
-        .execute(db)
-        .await;
+    proposals.push(proposal.clone());
+    if proposals.len() > MAX_ACTIVE_PROPOSALS {
+        proposals.remove(0);
+    }
+    save_proposals(db, &proposals).await;
 
     Some(proposal)
 }
@@ -241,23 +300,16 @@ pub fn format_proposal(proposal: &ProactiveProposal) -> String {
 }
 
 pub async fn acknowledge_proposal(db: &SqlitePool) {
-    // Update the timestamp to prevent immediate re-proposal
-    let proposal_key = PROPOSAL_KEY;
-    if let Ok(Some(row)) = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
-        .bind(proposal_key)
-        .fetch_optional(db)
-        .await
-    {
-        let value: Vec<u8> = row.get(0);
-        if let Ok(mut proposal) = serde_json::from_slice::<ProactiveProposal>(&value) {
-            proposal.created_at = Local::now().to_rfc3339();
-            if let Ok(payload) = serde_json::to_vec(&proposal) {
-                let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
-                    .bind(proposal_key)
-                    .bind(&payload)
-                    .execute(db)
-                    .await;
-            }
-        }
+    // Update timestamps to prevent immediate re-proposal
+    let mut proposals = load_proposals(db).await;
+    if proposals.is_empty() {
+        return;
     }
+
+    let now = Local::now().to_rfc3339();
+    for proposal in &mut proposals {
+        proposal.created_at = now.clone();
+    }
+
+    save_proposals(db, &proposals).await;
 }
