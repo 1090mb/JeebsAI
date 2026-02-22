@@ -40,10 +40,12 @@ function authHeaders(json = false) {
 /* ── safeFetch with 429 back-off ─────────────────────── */
 
 async function safeFetch(url, options, retries) {
-    if (retries === undefined) retries = 2;
+    // allow more retries and progressively longer delay
+    if (retries === undefined) retries = 4;
     const res = await fetch(url, options);
     if (res.status === 429 && retries > 0) {
-        await new Promise(function (r) { setTimeout(r, 1200); });
+        const delay = 1000 + (5 - retries) * 500; // 1s,1.5s,2s,...
+        await new Promise(function (r) { setTimeout(r, delay); });
         return safeFetch(url, options, retries - 1);
     }
     return res;

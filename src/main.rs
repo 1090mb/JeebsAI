@@ -164,11 +164,22 @@ async fn main() -> std::io::Result<()> {
     // Session cookie secret
     let secret_key = Key::generate();
 
-    // Governor configuration — generous enough for admin dashboards
+    // Governor configuration — throttles requests per client IP.
+    // Defaults kept low because the VPS is modest; adjust via environment
+    // variables if you need a higher rate.
+    let per_second: u32 = std::env::var("RATE_PER_SECOND")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20); // default 20 req/sec
+    let burst_size: u32 = std::env::var("RATE_BURST")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60); // default burst of 60
+
     let governor_conf = GovernorConfigBuilder::default()
         .key_extractor(WhitelistedKeyExtractor)
-        .per_second(10)
-        .burst_size(30)
+        .per_second(per_second)
+        .burst_size(burst_size)
         .finish()
         .unwrap();
 

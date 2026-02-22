@@ -117,6 +117,9 @@ WorkingDirectory=$APP_DIR
 Environment=PORT=$PORT
 Environment=DATABASE_URL=sqlite:$DB_FILE
 Environment=RUST_LOG=info
+# optional rate limiting; adjust via RATE_PER_SECOND and RATE_BURST env vars
+Environment=RATE_PER_SECOND=${RATE_PER_SECOND:-20}
+Environment=RATE_BURST=${RATE_BURST:-60}
 ExecStart=$APP_DIR/target/release/jeebs
 Restart=on-failure
 RestartSec=5

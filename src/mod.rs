@@ -68,6 +68,9 @@ pub async fn apply_update(
         let val: Vec<u8> = row.get(0);
         if let Ok(bytes) = decode_all(&val) {
             if let Ok(mut update) = serde_json::from_slice::<ProposedUpdate>(&bytes) {
+                if update.status == "denied" {
+                    return HttpResponse::BadRequest().json(json!({"error": "Cannot apply a denied update"}));
+                }
                 if update.status != "pending" {
                     return HttpResponse::BadRequest().json(json!({"error": "Update already processed"}));
                 }
@@ -134,6 +137,9 @@ pub async fn deny_update(
         let val: Vec<u8> = row.get(0);
         if let Ok(bytes) = decode_all(&val) {
             if let Ok(mut update) = serde_json::from_slice::<ProposedUpdate>(&bytes) {
+                if update.status == "applied" {
+                    return HttpResponse::BadRequest().json(json!({"error": "Cannot deny an applied update"}));
+                }
                 update.status = "denied".to_string();
                 if let Ok(json_bytes) = serde_json::to_vec(&update) {
                     if let Ok(new_val) = encode_all(&json_bytes, 1) {
