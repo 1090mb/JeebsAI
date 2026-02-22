@@ -1,5 +1,5 @@
 use chrono::Local;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use serde_json::json;
 
 /// Initialize toggle states from persistent storage

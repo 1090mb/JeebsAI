@@ -109,7 +109,7 @@ pub async fn find_answer_in_memory(db: &SqlitePool, question: &str) -> Result<Op
 
     // Try similar question search
     let pattern = format!("%{}%", question);
-    if let Ok(Some(row)) = sqlx::query(
+    let row = sqlx::query(
         "SELECT id, json_extract(data, '$.question') as question,
                 json_extract(data, '$.answer') as answer,
                 json_extract(data, '$.source_url') as source_url,
@@ -125,8 +125,9 @@ pub async fn find_answer_in_memory(db: &SqlitePool, question: &str) -> Result<Op
     .bind(&pattern)
     .fetch_optional(db)
     .await
-    .map_err(|e| e.to_string())?
-    {
+    .map_err(|e| e.to_string())?;
+
+    if let Some(row) = row {
         let id: String = row.get(0);
         let q: Option<String> = row.get(1);
         let a: Option<String> = row.get(2);

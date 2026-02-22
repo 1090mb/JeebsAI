@@ -52,22 +52,22 @@ pub async fn generate_knowledge_insights(db: &SqlitePool) -> Result<KnowledgePro
 
 /// Count total knowledge items across all sources
 async fn count_total_knowledge_items(db: &SqlitePool) -> Result<u64, String> {
-    let brain_count: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM brain_nodes")
+    let brain_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM brain_nodes")
         .fetch_one(db)
         .await
         .map_err(|e| e.to_string())?;
 
-    let triple_count: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM knowledge_triples")
+    let triple_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM knowledge_triples")
         .fetch_one(db)
         .await
         .map_err(|e| e.to_string())?;
 
-    let context_count: u64 = sqlx::query_scalar("SELECT COUNT(*) FROM jeebs_store WHERE key LIKE 'context:%'")
+    let context_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM jeebs_store WHERE key LIKE 'context:%'")
         .fetch_one(db)
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(brain_count + triple_count + context_count)
+    Ok((brain_count + triple_count + context_count) as u64)
 }
 
 /// Analyze knowledge organized by domain

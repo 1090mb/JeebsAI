@@ -1820,3 +1820,19 @@ fn random_crawl_candidates() -> Vec<&'static str> {
         "https://www.reddit.com/r/AskScience",
     ]
 }
+
+fn truncate_chars(input: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    input.chars().take(max_chars).collect()
+}
+
+fn canonical_prompt_key(input: &str) -> String {
+    input
+        .trim()
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}

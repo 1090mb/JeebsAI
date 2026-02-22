@@ -208,6 +208,17 @@ pub async fn user_chat(
                 )
                 .await;
 
+                crate::logging::log(
+                    &data.db,
+                    "INFO",
+                    "CHAT",
+                    &format!(
+                        "Jeebs reply to {} (.google): {}",
+                        username, summary
+                    ),
+                )
+                .await;
+
                 return HttpResponse::Ok().json(UserChatResponse {
                     response: format!(
                         "🔎 **Google Summary for** `{}`:\n\n{}\n\n✅ Stored in Jeebs brain for future recall.",
@@ -268,6 +279,17 @@ pub async fn user_chat(
             )
             .await;
 
+            crate::logging::log(
+                &data.db,
+                "INFO",
+                "CHAT",
+                &format!(
+                    "Jeebs reply to {} (trainer focus): Training focus set to {}",
+                    username, topic
+                ),
+            )
+            .await;
+
             return HttpResponse::Ok().json(UserChatResponse {
                 response: format!(
                     "✅ Training focus set to: {}. Jeebs will prioritize this task in the next training cycle.",
@@ -294,6 +316,17 @@ pub async fn user_chat(
             )
             .await;
 
+            crate::logging::log(
+                &data.db,
+                "INFO",
+                "CHAT",
+                &format!(
+                    "Jeebs reply to {} (trainer toggle): Training disabled",
+                    username
+                ),
+            )
+            .await;
+
             return HttpResponse::Ok().json(UserChatResponse {
                 response: "🛑 Training disabled by trainer command.".to_string(),
                 username,
@@ -317,6 +350,17 @@ pub async fn user_chat(
             )
             .await;
 
+            crate::logging::log(
+                &data.db,
+                "INFO",
+                "CHAT",
+                &format!(
+                    "Jeebs reply to {} (trainer toggle): Training enabled",
+                    username
+                ),
+            )
+            .await;
+
             return HttpResponse::Ok().json(UserChatResponse {
                 response: "▶️ Training enabled by trainer command.".to_string(),
                 username,
@@ -333,6 +377,14 @@ pub async fn user_chat(
         &[],
         Some(&username),
         Some(&username),
+    )
+    .await;
+
+    logging::log(
+        &data.db,
+        "INFO",
+        "CHAT",
+        &format!("Jeebs reply to {}: {}", username, response),
     )
     .await;
 

@@ -52,7 +52,11 @@ pub struct AuthStatusResponse {
     pub token: Option<String>,
 }
 
-fn update_user_session(db: &SqlitePool, username: &str, http_req: &HttpRequest) -> Result<(), sqlx::Error> {
+async fn update_user_session(
+    db: &SqlitePool,
+    username: &str,
+    http_req: &HttpRequest,
+) -> Result<(), sqlx::Error> {
     let ip = peer_addr(http_req);
     let user_agent = http_req
         .headers()
@@ -69,7 +73,9 @@ fn update_user_session(db: &SqlitePool, username: &str, http_req: &HttpRequest) 
     .bind(user_agent)
     .bind(&now)
     .execute(db)
-    .map(|_| ())
+    .await?;
+
+    Ok(())
 }
 
 fn valid_username(username: &str) -> bool {
@@ -304,7 +310,7 @@ async fn handle_pgp_login(
     }
 
     // Track user session in database
-    let _ = update_user_session(&data.db, username, http_req);
+    let _ = update_user_session(&data.db, username, http_req).await;
 
     crate::logging::log(
         &data.db,
@@ -563,7 +569,7 @@ pub async fn session_ping(
         return HttpResponse::Unauthorized().json(json!({"error": "Not logged in"}));
     };
 
-    if let Err(err) = update_user_session(&data.db, &username, &http_req) {
+    if let Err(err) = update_user_session(&data.db, &username, &http_req).await {
         return HttpResponse::InternalServerError().json(json!({
             "error": format!("Failed to update session: {err}")
         }));
