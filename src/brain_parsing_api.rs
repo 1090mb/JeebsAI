@@ -201,9 +201,6 @@ pub async fn get_graph_statistics(
         }
     }
 }
-        }
-    }
-}
 
 /// Analyze relationships between nodes in the knowledge graph
 #[get("/api/brain/graph/relationships")]
