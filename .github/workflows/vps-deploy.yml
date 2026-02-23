@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Build and deploy (v0.0.1 semantics)
+    name: Build and deploy (release semantics)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

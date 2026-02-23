@@ -2903,19 +2903,24 @@ impl Cortex {
                     .map(|r| r.get::<i64, _>(0))
                     .unwrap_or(0);
 
-                format!(
-                    "💻 **System Status**\n\n\
-                    • **CPU**: {:.1}% avg across {} cores\n\
-                    • **Memory**: {:.1}% used ({:.0} MB / {:.0} MB)\n\
-                    • **Brain nodes**: {}\n\
-                    • **Server**: JeebsAI v0.0.1 (Rust/Actix)",
-                    avg_cpu,
-                    cpu_count,
-                    mem_pct,
-                    used_mem as f64 / 1_048_576.0,
-                    total_mem as f64 / 1_048_576.0,
-                    node_count
-                )
+                {
+                    // Read version from VERSION file if present; fallback to v0.0.0
+                    let ver = std::fs::read_to_string("VERSION").ok().map(|s| s.trim().to_string()).unwrap_or_else(|| "v0.0.0".to_string());
+                    format!(
+                        "💻 **System Status**\n\n\
+                        • **CPU**: {:.1}% avg across {} cores\n\
+                        • **Memory**: {:.1}% used ({:.0} MB / {:.0} MB)\n\
+                        • **Brain nodes**: {}\n\
+                        • **Server**: JeebsAI {} (Rust/Actix)",
+                        avg_cpu,
+                        cpu_count,
+                        mem_pct,
+                        used_mem as f64 / 1_048_576.0,
+                        total_mem as f64 / 1_048_576.0,
+                        node_count,
+                        ver
+                    )
+                }
             }
 
             Intent::PluginLogic => {
