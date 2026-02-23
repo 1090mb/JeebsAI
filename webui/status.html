@@ -175,14 +175,17 @@ JeebsNav.init('status');
 
 // Access control for 1090mb, admin, trainer
 async function checkAccess() {
-  const auth = await requireAuth('status');
-  if (!auth || !auth.loggedIn || !auth.is_admin) {
-    document.body.innerHTML = '<div class="shell" style="padding-top:60px"><h1>Server Status</h1><div class="card" style="margin-top:32px"><span class="text-danger">Access denied. Only admin allowed.</span></div></div>';
+  // require trainer role (allows trainers and root admin)
+  const auth = await requireAuth('trainer');
+  if (!auth || !auth.loggedIn || (!auth.isAdmin && !auth.isTrainer)) {
+    document.body.innerHTML = '<div class="shell" style="padding-top:60px"><h1>Server Status</h1><div class="card" style="margin-top:32px"><span class="text-danger">Access denied. Admin or Trainer required.</span></div></div>';
     throw new Error('Access denied');
   }
 }
 checkAccess().then(()=>{
   loadStats();
+  // also load debug session info
+  loadSessionDebug();
 });
 
 // Try to fetch stats, fallback to static if unavailable
@@ -211,6 +214,37 @@ async function loadStats(){
   document.getElementById('stat-cycles').textContent = '2,345';
   document.getElementById('stat-warnings').textContent = '0';
   document.getElementById('stat-errors').textContent = '0';
+}
+</script>
+<script>
+// Debug panel: fetch session info and server stats
+async function loadSessionDebug(){
+  try{
+    // create panel
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '24px';
+    card.innerHTML = `<h3>Session Debug</h3><div style="font-size:.9em;color:var(--text-muted);margin-bottom:8px">Shows the raw session/identity information returned by the server for debugging.</div><pre id="session-json" style="white-space:pre-wrap;background:var(--bg-1);padding:12px;border-radius:8px;border:1px solid var(--border);">Loading...</pre><div style="margin-top:8px"><button id="refresh-session-btn" class="btn btn-ghost">Refresh</button></div>`;
+    const shell = document.querySelector('.shell');
+    if (shell) shell.insertBefore(card, shell.firstChild.nextSibling);
+
+    async function fetchAndRender(){
+      try{
+        const [sres, statsres] = await Promise.all([
+          fetch('/api/auth/session', {credentials:'same-origin'}),
+          fetch('/api/server/stats', {credentials:'same-origin'})
+        ]);
+        const sjson = sres.ok ? await sres.json() : {error: 'session endpoint not available', status: sres.status};
+        const stjson = statsres.ok ? await statsres.json() : {error: 'stats endpoint not available', status: statsres.status};
+        document.getElementById('session-json').textContent = JSON.stringify({session: sjson, server_stats: stjson}, null, 2);
+      }catch(e){
+        document.getElementById('session-json').textContent = 'Failed to fetch debug info: '+String(e);
+      }
+    }
+
+    document.getElementById('refresh-session-btn').addEventListener('click', fetchAndRender);
+    fetchAndRender();
+  }catch(e){console.warn('loadSessionDebug failed', e)}
 }
 </script>
 </body>

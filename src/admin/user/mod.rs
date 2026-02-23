@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use actix_session::Session;
-use actix_web::{delete, get, post, web, HttpResponse, Responder};
+use actix_web::{delete, get, post, web, HttpResponse, Responder, HttpRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Row;
@@ -14,8 +14,33 @@ pub struct UserInfo {
 }
 
 #[get("/api/admin/users")]
-pub async fn admin_list_users(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session.get::<bool>("is_admin").unwrap_or(None).unwrap_or(false);
+pub async fn admin_list_users(data: web::Data<AppState>, session: Session, http_req: HttpRequest) -> impl Responder {
+    // If session not logged-in, try to populate from bearer token
+    let logged_in = session.get::<bool>("logged_in").ok().flatten().unwrap_or(false);
+    if !logged_in {
+        if let Some(claims) = crate::auth::extract_bearer_claims(&http_req) {
+            let role = sqlx::query("SELECT value FROM jeebs_store WHERE `key` = ?")
+                .bind(format!("user:{}", claims.username))
+                .fetch_optional(&data.db)
+                .await
+                .ok()
+                .and_then(|row| row.map(|r| r.get::<Vec<u8>, _>(0)))
+                .and_then(|raw| serde_json::from_slice::<serde_json::Value>(&raw).ok())
+                .and_then(|json| json.get("role").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .unwrap_or_else(|| "user".to_string());
+
+            let is_admin_flag = crate::auth::is_admin_role(&role) || claims.username == crate::auth::ROOT_ADMIN_USERNAME;
+            let is_trainer = role == "trainer" || crate::auth::is_super_admin_role(&role);
+
+            let _ = session.insert("logged_in", true);
+            let _ = session.insert("username", &claims.username);
+            let _ = session.insert("role", &role);
+            let _ = session.insert("is_admin", is_admin_flag);
+            let _ = session.insert("is_trainer", is_trainer);
+        }
+    }
+
+    let is_admin = crate::auth::is_effective_admin_session(&session);
     if !is_admin {
         return HttpResponse::Forbidden()
             .json(json!({"error": "Admin privileges required"}));
