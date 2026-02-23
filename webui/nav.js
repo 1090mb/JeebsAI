@@ -66,7 +66,7 @@ const JeebsNav = (function () {
             <div class="topnav-inner">
                 <a class="topnav-brand" href="/webui/index.html">
                     ${LOGO_SVG}
-                    <span>JeebsAI <span id="jeebs-version" class="jeebs-version">v0.0.1</span></span>
+                    <span>JeebsAI <span id="jeebs-version" class="jeebs-version">v...</span></span>
                 </a>
                 <button class="topnav-toggle" id="navToggle" aria-label="Toggle navigation">&#9776;</button>
                 <div class="topnav-links" id="navLinks">
@@ -107,7 +107,10 @@ const JeebsNav = (function () {
             if (!res.ok) return;
             const data = await res.json();
             const el = document.getElementById('jeebs-version');
-            if (el && data && data.version) el.textContent = data.version;
+            if (el && data && data.version) {
+                // Ensure a leading 'v' for display consistency
+                el.textContent = data.version.startsWith('v') ? data.version : ('v' + data.version);
+            }
         } catch (e) { /* ignore */ }
     }
 

@@ -179,19 +179,48 @@ pub fn is_admin_session(session: &Session) -> bool {
         return false;
     }
 
-    let is_admin = session
+    // Check explicit is_admin flag first
+    let is_admin_flag = session
         .get::<bool>("is_admin")
         .ok()
         .flatten()
         .unwrap_or(false);
-    is_admin
+    if is_admin_flag {
+        return true;
+    }
+
+    // Fallback: check stored role (handles legacy sessions where role exists but flag missing)
+    if let Ok(Some(role)) = session.get::<String>("role") {
+        if is_admin_role(&role) {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Returns true if the session belongs to the root admin or any admin user.
 pub fn is_effective_admin_session(session: &Session) -> bool {
+    // Check explicit admin flag
+    let is_admin_flag = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
+    if is_admin_flag {
+        return true;
+    }
+
+    // Check role stored in session (super_admin should be treated as admin)
+    if let Ok(Some(role)) = session.get::<String>("role") {
+        if is_admin_role(&role) {
+            return true;
+        }
+    }
+
+    // Finally, allow hardcoded root admin username
     let username = session.get::<String>("username").ok().flatten();
-    let is_admin_flag = session.get::<bool>("is_admin").ok().flatten();
-    is_effective_admin_opt(username.as_deref(), is_admin_flag)
+    if let Some(u) = username.as_deref() {
+        return u == ROOT_ADMIN_USERNAME;
+    }
+
+    false
 }
 
 /// Pure helper: determine effective admin status from optional username and is_admin flag.

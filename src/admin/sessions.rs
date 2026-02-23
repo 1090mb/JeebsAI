@@ -16,9 +16,10 @@ pub struct UserSession {
 
 #[get("/api/admin/sessions")]
 pub async fn get_active_sessions(data: web::Data<AppState>, session: Session) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    // Allow any admin-equivalent session (admin or super_admin)
+    if !crate::auth::is_effective_admin_session(&session) {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin privileges required"}));
     }
 
     let cutoff = Local::now() - Duration::minutes(30);
@@ -69,9 +70,10 @@ pub async fn terminate_session(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    // Allow any admin-equivalent session (admin or super_admin)
+    if !crate::auth::is_effective_admin_session(&session) {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin privileges required"}));
     }
     let username = path.into_inner();
 
