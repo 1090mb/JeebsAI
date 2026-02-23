@@ -31,10 +31,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # Ensure we're on main and have latest
-          git fetch origin main
-          git checkout main
-          git pull origin main
+          repo_dir=/tmp/jeebs-repo
+          rm -rf "$repo_dir"
+
+          # Clone a fresh copy of main using the token so we don't touch the runner workspace
+          git clone --depth 1 --branch main "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$repo_dir"
+          cd "$repo_dir"
 
           # Read current version or default
           if [ -f VERSION ]; then
@@ -57,10 +59,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION
-          git commit -m "chore: bump version to $new_version [ci skip]"
+          git commit -m "chore: bump version to $new_version [ci skip]" || echo "No changes to commit"
 
-          # Push using the GITHUB_TOKEN so the action can update main
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # Push using the GITHUB_TOKEN
           git push origin main
           echo "Bumped VERSION -> $new_version"
 
