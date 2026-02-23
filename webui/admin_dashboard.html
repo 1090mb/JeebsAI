@@ -62,7 +62,7 @@
 
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
     <!-- Active Sessions -->
-    <div class="card">
+    <div id="activeSessionsCard" class="card">
       <h3>Active Sessions</h3>
       <div id="sessionsList" class="scroll-box" style="max-height:220px"><span class="text-muted">Loading...</span></div>
     </div>
@@ -142,6 +142,23 @@ async function loadStatus(){
     const res=await safeFetch("/api/admin/status",{credentials:"same-origin",headers:authHeaders()});
     if(res.ok){const d=await res.json();document.getElementById("srvUptime").textContent=d.uptime||"—";}
   }catch(e){}
+
+  // Fetch server stats (includes storage) and display available storage in MB
+  try{
+    const res = await safeFetch('/api/server/stats', { credentials: 'same-origin', headers: authHeaders() });
+    if(res.ok){
+      const d = await res.json();
+      const storage = (d.system && d.system.storage) ? d.system.storage : null;
+      if(storage && typeof storage.available_mb !== 'undefined'){
+        const avail = Math.round(storage.available_mb);
+        const total = Math.round(storage.total_mb || 0);
+        const el = document.getElementById('srvStatus');
+        el.textContent = avail + ' MB free' + (total ? (' of ' + total + ' MB') : '');
+        el.className = 'badge badge-accent';
+        el.title = 'Available storage on server';
+      }
+    }
+  }catch(e){}
 }
 
 async function loadToggles(){
@@ -163,11 +180,15 @@ async function loadToggles(){
       if(sw) sw.checked = !!d.enabled;
     }
   }catch(e){}
-  function onInternetSwitch() {
+  
+  // Ensure global handler exists (used by inline onchange attribute)
+  window.onInternetSwitch = function onInternetSwitch(){
     const sw = document.getElementById("internetSwitch");
     if (!sw) return;
-    toggleFeature('internet', sw.checked);
-  }
+    // disable during request
+    sw.disabled = true;
+    toggleFeature('internet', sw.checked).finally(()=>{ sw.disabled = false; });
+  };
   try{
     const res=await safeFetch("/api/admin/training/status",{credentials:"same-origin",headers:authHeaders()});
     if(res.ok){
@@ -181,6 +202,9 @@ async function loadToggles(){
       const dot=document.getElementById("dotTraining");
       dot.style.background=t.enabled?"#2ecc40":"#e74c3c";
       dot.title=t.enabled?"Training enabled":"Training disabled";
+      // Set training switch state (if present)
+      const ts = document.getElementById('trainingSwitch');
+      if(ts) ts.checked = !!t.enabled;
     }
   }catch(e){}
 }
@@ -224,6 +248,14 @@ async function toggleFeature(feat,on){
   loadToggles();
 }
 
+// Global handler for training switch (used by inline onchange)
+window.onTrainingSwitch = function onTrainingSwitch(){
+  const sw = document.getElementById('trainingSwitch');
+  if(!sw) return;
+  sw.disabled = true;
+  toggleFeature('training', sw.checked).finally(()=>{ sw.disabled = false; });
+};
+
 // ENFORCEMENT LOGIC (for backend, but documented here for clarity):
 // - If Training is OFF: No training can occur anywhere (trainers, background, or JeebsAI itself)
 // - If Internet is OFF: JeebsAI cannot access the internet for any reason
@@ -232,15 +264,24 @@ async function toggleFeature(feat,on){
 
 async function loadSessions(){
   try{
+    // Only show sessions for admin or super_admin roles
+    const auth = await getAuthState();
+    const card = document.getElementById('activeSessionsCard');
+    const el = document.getElementById('sessionsList');
+    if(!auth || (!auth.isAdmin && auth.role !== 'super_admin')){
+      if(card) card.style.display = 'none';
+      if(el) el.innerHTML = '<span class="text-muted">Restricted to admin users.</span>';
+      return;
+    }
+    if(card) card.style.display = '';
     const res=await safeFetch("/api/admin/sessions",{credentials:"same-origin",headers:authHeaders()});
-    const el=document.getElementById("sessionsList");
     if(!res.ok){el.innerHTML='<span class="text-muted">Access denied.</span>';return;}
     const sessions=await res.json();
     if(!sessions.length){el.innerHTML='<span class="text-muted">No active sessions.</span>';return;}
     el.innerHTML=sessions.map(function(s){
       return '<div class="data-list-item"><div><strong>'+escapeHtml(s.username)+'</strong> <span class="text-muted">'+escapeHtml(s.ip)+'</span><br/><span class="text-muted" style="font-size:0.8em">Last: '+new Date(s.last_seen).toLocaleString()+'</span></div><button class="btn btn-danger btn-sm" onclick="endSession(\''+escapeHtml(s.username)+'\')">End</button></div>';
     }).join("");
-  }catch(e){document.getElementById("sessionsList").innerHTML='<span class="text-muted">Error.</span>';}
+  }catch(e){document.getElementById("sessionsList").innerHTML='<span class="text-muted">Error.</span>';} 
 }
 
 async function endSession(u){

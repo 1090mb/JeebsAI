@@ -12,9 +12,11 @@ struct TrainingToggleRequest {
 
 #[get("/api/admin/training/status")]
 pub async fn get_training_status(data: web::Data<AppState>, session: Session) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    // Allow trainers as well as admin/super_admin
+    let is_trainer = session.get::<bool>("is_trainer").ok().flatten().unwrap_or(false);
+    if !is_trainer && !crate::auth::is_effective_admin_session(&session) {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin or trainer privileges required"}));
     }
 
     let internet_enabled = *data.internet_enabled.read().unwrap();
@@ -29,9 +31,11 @@ pub async fn set_training_mode(
     session: Session,
     req: web::Json<TrainingToggleRequest>,
 ) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    // Only allow trainers or admins to change training mode
+    let is_trainer = session.get::<bool>("is_trainer").ok().flatten().unwrap_or(false);
+    if !is_trainer && !crate::auth::is_effective_admin_session(&session) {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin or trainer privileges required"}));
     }
 
     if let Err(err) =
@@ -69,9 +73,11 @@ pub async fn run_training_now(
     data: web::Data<AppState>,
     session: Session,
 ) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    // Allow trainers or admins to manually trigger training
+    let is_trainer = session.get::<bool>("is_trainer").ok().flatten().unwrap_or(false);
+    if !is_trainer && !crate::auth::is_effective_admin_session(&session) {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin or trainer privileges required"}));
     }
 
     let start = std::time::Instant::now();

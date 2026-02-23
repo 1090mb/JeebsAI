@@ -4,7 +4,7 @@ use actix_web::{get, web, HttpResponse, Responder};
 use chrono::{DateTime, Local};
 use serde_json::json;
 use sqlx::Row;
-use sysinfo::System;
+use sysinfo::{System, DiskExt};
 
 /// Original admin-only endpoint (kept for backwards compat)
 #[get("/api/admin/status")]
@@ -71,15 +71,28 @@ pub async fn get_server_stats(data: web::Data<AppState>, session: Session) -> im
     }
 
     // ── System metrics ──
-    let (used_memory, total_memory, available_memory, uptime, cpu_count) = {
+    let (used_memory, total_memory, available_memory, uptime, cpu_count, disk_total, disk_available) = {
         let mut sys = data.sys.lock().unwrap();
         sys.refresh_memory();
+        // refresh disks in case they changed
+        sys.refresh_disks_list();
+        sys.refresh_disks();
+
+        let mut total_bytes: u64 = 0;
+        let mut avail_bytes: u64 = 0;
+        for d in sys.disks() {
+            total_bytes = total_bytes.saturating_add(d.total_space());
+            avail_bytes = avail_bytes.saturating_add(d.available_space());
+        }
+
         (
             sys.used_memory(),
             sys.total_memory(),
             sys.available_memory(),
             System::uptime(),
             sys.cpus().len(),
+            total_bytes,
+            avail_bytes,
         )
     };
 
@@ -163,6 +176,11 @@ pub async fn get_server_stats(data: web::Data<AppState>, session: Session) -> im
                 "total_mb": bytes_to_mb(total_memory),
                 "available_mb": bytes_to_mb(available_memory),
                 "used_percent": (mem_percent * 10.0).round() / 10.0
+            },
+            "storage": {
+                "total_mb": bytes_to_mb(disk_total),
+                "available_mb": bytes_to_mb(disk_available),
+                "used_percent": if disk_total > 0.0 { ((bytes_to_mb(disk_total) - bytes_to_mb(disk_available)) / bytes_to_mb(disk_total) * 100.0 * 10.0).round() / 10.0 } else { 0.0 }
             }
         },
         "database": {

@@ -163,6 +163,96 @@ function escapeHtml(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").rep
       }catch(e){log("Request failed: "+e);}
     };
 
+    // Ensure training control functions exist here (they were in admin dashboard previously)
+    window.setTrainingMode = async function(on){
+      try{
+        // disable buttons while working
+        const enableBtn = document.querySelector("button[onclick=\"setTrainingMode(true)\"]");
+        const disableBtn = document.querySelector("button[onclick=\"setTrainingMode(false)\"]");
+        if(enableBtn) enableBtn.disabled = true;
+        if(disableBtn) disableBtn.disabled = true;
+        const res = await safeFetch('/api/admin/training/mode', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: authHeaders(true),
+          body: JSON.stringify({ enabled: !!on })
+        });
+        if(!res.ok){
+          const txt = await res.text().catch(()=>res.statusText);
+          (document.getElementById('training-status')||{}).textContent = 'Failed to set training mode: '+txt;
+        } else {
+          await loadTrainingStatus();
+          (document.getElementById('training-log')||{}).textContent = (new Date()).toLocaleString() + ': Training mode set to ' + (on ? 'ON' : 'OFF') + '\n' + (document.getElementById('training-log').textContent || '');
+        }
+      } catch(e){ (document.getElementById('training-status')||{}).textContent = 'Error: '+e }
+      finally{ if(enableBtn) enableBtn.disabled = false; if(disableBtn) disableBtn.disabled = false; }
+    };
+
+    window.runTrainingNow = async function(){
+      try{
+        const runBtn = document.querySelector("button[onclick=\"runTrainingNow()\"]");
+        if(runBtn) runBtn.disabled = true;
+        const statusEl = document.getElementById('training-status');
+        if(statusEl) statusEl.textContent = 'Starting training...';
+        const res = await safeFetch('/api/admin/training/run', { method: 'POST', credentials: 'same-origin', headers: authHeaders(true) });
+        if(!res.ok){ const txt = await res.text().catch(()=>res.statusText); statusEl.textContent = 'Failed to start training: '+txt; return; }
+        const d = await res.json();
+        statusEl.textContent = d.status ? ('Training: '+d.status) : 'Training started';
+        // Prepend log
+        const logEl = document.getElementById('training-log');
+        if(logEl) logEl.textContent = (new Date()).toLocaleString()+': Started training — '+(d.topic||d.message||'')+'\n'+logEl.textContent;
+        // start polling brief log updates
+        pollTrainingLog();
+      } catch(e){ (document.getElementById('training-status')||{}).textContent = 'Error: '+e }
+      finally{ const runBtn = document.querySelector("button[onclick=\"runTrainingNow()\"]"); if(runBtn) runBtn.disabled = false; }
+    };
+
+    async function loadTrainingStatus(){
+      try{
+        const res = await safeFetch('/api/admin/training/status', { credentials: 'same-origin', headers: authHeaders() });
+        const el = document.getElementById('training-status');
+        if(!res.ok){ if(el) el.textContent = 'Training status unavailable'; return; }
+        const d = await res.json();
+        const t = d.training || {};
+        if(el) el.textContent = 'Training: ' + (t.enabled ? 'ON' : 'OFF') + (t.status ? (' | '+t.status) : '');
+        // Build a concise live summary of what and where JeebsAI is learning
+        try{
+          const logEl = document.getElementById('training-log');
+          const now = new Date().toLocaleString();
+          const topic = t.active_target || t.focus_topic || (t.last_topics && t.last_topics.length? t.last_topics[0] : null);
+          const phase = t.active_phase || '';
+          const running = t.is_cycle_running ? 'running' : 'idle';
+          let header = `${now}: ${topic?('Topic: '+topic+' | '):''}Phase: ${phase} | ${running}`;
+          if(logEl) {
+            logEl.textContent = header + '\n' + (logEl.textContent || '');
+            // Show recent websites scraped
+            if(t.last_websites && t.last_websites.length){
+              logEl.textContent = 'Sources: ' + t.last_websites.slice(0,6).join(', ') + '\n' + logEl.textContent;
+            }
+            // Show recently learned items (facts)
+            if(t.last_learned_items && t.last_learned_items.length){
+              const facts = t.last_learned_items.slice(0,6).map(function(it){ return (it.fact||it.canon||it.canonical||it.title||'') + (it.source?(' (src:'+it.source+')') : ''); });
+              logEl.textContent = 'Learned: ' + facts.join(' | ') + '\n' + logEl.textContent;
+            }
+          }
+        }catch(e){ /* non-fatal */ }
+      } catch(e){ const el=document.getElementById('training-status'); if(el) el.textContent='Training status error'; }
+    }
+
+    async function pollTrainingLog(){
+      try{
+        for(let i=0;i<24;i++){ // poll for 2 minutes
+          await new Promise(r=>setTimeout(r,5000));
+          const res = await safeFetch('/api/admin/training/status', { credentials: 'same-origin', headers: authHeaders() });
+          if(!res.ok) continue;
+          const d = await res.json();
+          const t = d.training || {};
+          if(t.log){ const logEl = document.getElementById('training-log'); if(logEl){ logEl.textContent = t.log + '\n' + logEl.textContent; } }
+          if(t.status === 'done' || t.status === 'idle') break;
+        }
+      } catch(e){ console.warn('pollTrainingLog failed', e); }
+    }
+
     window.sendFocus=function(){var f=document.getElementById("focusInput").value.trim();if(!f){log("Enter a focus topic.");return;}sendCmd("train: "+f);};
     window.sendCustom=function(){var c=document.getElementById("customInput").value.trim();if(!c){log("Enter a command.");return;}sendCmd(c);};
     window.clearOutput=function(){outputEl.textContent="No commands sent yet.";};
