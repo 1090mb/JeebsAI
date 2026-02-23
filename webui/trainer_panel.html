@@ -19,7 +19,10 @@
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <button class="btn btn-accent" onclick="setTrainingMode(true)">Enable Training</button>
       <button class="btn btn-danger" onclick="setTrainingMode(false)">Disable Training</button>
-      <button class="btn btn-primary" onclick="runTrainingNow()">Run Full Training</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button id="runFullBtn" class="btn btn-primary" onclick="runTrainingNow()">Run Full Training</button>
+        <div id="training-feeling" title="Jeebs mood" style="font-size:1.4em;line-height:1;">🙂</div>
+      </div>
     </div>
     <div id="training-status" class="text-muted" style="margin-bottom:8px">Loading training status...</div>
     <div id="training-log" class="log-box" style="max-height:180px;min-height:60px;background:var(--bg-2);overflow:auto;font-size:.92em"></div>
@@ -194,15 +197,14 @@ function escapeHtml(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").rep
         if(runBtn) runBtn.disabled = true;
         const statusEl = document.getElementById('training-status');
         if(statusEl) statusEl.textContent = 'Starting training...';
-        const res = await safeFetch('/api/admin/training/run', { method: 'POST', credentials: 'same-origin', headers: authHeaders(true) });
+        const res = await safeFetch('/api/admin/training/run/full', { method: 'POST', credentials: 'same-origin', headers: authHeaders(true) });
         if(!res.ok){ const txt = await res.text().catch(()=>res.statusText); statusEl.textContent = 'Failed to start training: '+txt; return; }
         const d = await res.json();
-        statusEl.textContent = d.status ? ('Training: '+d.status) : 'Training started';
-        // Prepend log
+        statusEl.textContent = 'Full training started (run ' + (d.run_id||d.runId||'') + ')';
         const logEl = document.getElementById('training-log');
-        if(logEl) logEl.textContent = (new Date()).toLocaleString()+': Started training — '+(d.topic||d.message||'')+'\n'+logEl.textContent;
-        // start polling brief log updates
-        pollTrainingLog();
+        if(logEl) logEl.textContent = (new Date()).toLocaleString()+': Started full internet training — run ' + (d.run_id||d.runId||'') + '\n' + (logEl.textContent || '');
+        // refresh background runs immediately
+        loadBackgroundRuns();
       } catch(e){ (document.getElementById('training-status')||{}).textContent = 'Error: '+e }
       finally{ const runBtn = document.querySelector("button[onclick=\"runTrainingNow()\"]"); if(runBtn) runBtn.disabled = false; }
     };
@@ -218,12 +220,34 @@ function escapeHtml(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").rep
         // Build a concise live summary of what and where JeebsAI is learning
         try{
           const logEl = document.getElementById('training-log');
+          const feelingEl = document.getElementById('training-feeling');
           const now = new Date().toLocaleString();
           const topic = t.active_target || t.focus_topic || (t.last_topics && t.last_topics.length? t.last_topics[0] : null);
           const phase = t.active_phase || '';
           const running = t.is_cycle_running ? 'running' : 'idle';
           let header = `${now}: ${topic?('Topic: '+topic+' | '):''}Phase: ${phase} | ${running}`;
+
+          // Determine sentiment/feeling for the emoji (support multiple possible keys)
+          try{
+            let feeling = 'neutral';
+            if(t.feeling && typeof t.feeling === 'string'){
+              const f = t.feeling.toLowerCase();
+              if(f==='like' || f==='positive' || f==='happy') feeling = 'like';
+              if(f==='dislike' || f==='negative' || f==='sad') feeling = 'dislike';
+            }
+            if(feeling==='neutral' && (typeof t.sentiment_score !== 'undefined')){
+              const s = Number(t.sentiment_score||0);
+              if(!isNaN(s)){ feeling = s>0? 'like' : (s<0? 'dislike' : 'neutral'); }
+            }
+            if(feelingEl){
+              if(feeling==='like'){ feelingEl.textContent = '😊'; feelingEl.title = 'Jeebs likes this topic'; }
+              else if(feeling==='dislike'){ feelingEl.textContent = '☹️'; feelingEl.title = 'Jeebs dislikes this topic'; }
+              else { feelingEl.textContent = '🙂'; feelingEl.title = 'Jeebs is neutral'; }
+            }
+          } catch(e) { /* ignore sentiment parsing errors */ }
+
           if(logEl) {
+            // Put the most important info up top for quick scanning
             logEl.textContent = header + '\n' + (logEl.textContent || '');
             // Show recent websites scraped
             if(t.last_websites && t.last_websites.length){
