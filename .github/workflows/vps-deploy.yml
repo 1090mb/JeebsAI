@@ -6,93 +6,27 @@ on:
 
 jobs:
   deploy:
-    name: Build & Deploy to VPS
+    name: Build and deploy (v0.0.1 semantics)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Ensure Rust stable
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev libsqlite3-dev rsync openssh-client
+          rustup default stable || true
 
-      - name: Set up Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-deploy-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-deploy-
-
-      - name: Build release binary
-        run: cargo build --release
+      - name: Build release
+        run: |
+          cargo build --release
 
       - name: Create VERSION file from release tag
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: echo "${{ github.event.release.tag_name }}" > VERSION
+
+      - name: Copy files to VPS (v0.0.1 behavior)
         run: |
-          if [ -n "$RELEASE_TAG" ]; then
-            TAG="$RELEASE_TAG"
-          else
-            TAG="${GITHUB_REF##*/}"
-          fi
-          echo "$TAG" > VERSION
-          echo "Created VERSION: $(cat VERSION)"
-          ls -lh target/release/jeebs VERSION || true
-
-      - name: Add SSH key to agent
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add VPS to known_hosts (optional port)
-        run: |
-          mkdir -p ~/.ssh
-          PORT=${{ secrets.VPS_PORT }}
-          if [ -z "$PORT" ] || [ "$PORT" = "" ]; then PORT=22; fi
-          ssh-keyscan -p "$PORT" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts || true
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Upload binary, webui and VERSION to VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_TARGET: ${{ secrets.VPS_TARGET }}
-        run: |
-          set -euo pipefail
-          if [ -z "${VPS_PORT:-}" ]; then VPS_PORT=22; fi
-          if [ -z "${VPS_TARGET:-}" ]; then VPS_TARGET=/root/JeebsAI; fi
-          echo "Uploading to $VPS_USER@$VPS_HOST:$VPS_TARGET"
-          rsync -avz --delete --exclude target/ ./webui/ -e "ssh -p $VPS_PORT" "$VPS_USER@$VPS_HOST:$VPS_TARGET/webui/"
-          scp -P "$VPS_PORT" target/release/jeebs "$VPS_USER@$VPS_HOST:$VPS_TARGET/target/release/jeebs"
-          scp -P "$VPS_PORT" VERSION "$VPS_USER@$VPS_HOST:$VPS_TARGET/VERSION"
-
-      - name: Remote deploy (restart service)
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          command_timeout: 15m
-          script: |
-            set -e
-            TARGET=${{ secrets.VPS_TARGET }}
-            if [ -z "$TARGET" ]; then TARGET=/root/JeebsAI; fi
-            mkdir -p "$TARGET"
-            chmod +x "$TARGET/target/release/jeebs" || true
-            systemctl daemon-reload || true
-            systemctl restart jeebs || true
-            sleep 3
-            systemctl status --no-pager --full jeebs || true
+          scp -o StrictHostKeyChecking=no target/release/jeebs root@192.227.193.148:/root/JeebsAI/target/release/jeebs
+          scp -o StrictHostKeyChecking=no -r webui/ root@192.227.193.148:/root/JeebsAI/webui/
+          scp -o StrictHostKeyChecking=no VERSION root@192.227.193.148:/root/JeebsAI/VERSION
+          ssh -o StrictHostKeyChecking=no root@192.227.193.148 'chmod +x /root/JeebsAI/target/release/jeebs && systemctl daemon-reload && systemctl restart jeebs && systemctl status --no-pager --full jeebs'
 
