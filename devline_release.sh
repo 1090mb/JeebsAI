@@ -23,6 +23,13 @@ else
     git checkout -b devline1
 fi
 
+# Reset Cargo.lock to ensure clean dependencies
+echo "🧹 Resetting Cargo.lock..."
+rm -f Cargo.lock
+if command -v cargo &> /dev/null; then
+    cargo generate-lockfile || echo "⚠️ Failed to generate lockfile. Proceeding with deletion."
+fi
+
 git add .
 git commit -m "Update devline1: $(date '+%Y-%m-%d %H:%M:%S')" || echo "Nothing to commit"
 git push -u origin devline1
