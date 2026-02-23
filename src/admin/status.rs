@@ -4,7 +4,23 @@ use actix_web::{get, web, HttpResponse, Responder};
 use chrono::{DateTime, Local};
 use serde_json::json;
 use sqlx::Row;
-use sysinfo::{System, DiskExt};
+use sysinfo::System;
+use libc::statvfs;
+use std::ffi::CString;
+
+fn get_fs_space(path: &str) -> Option<(u64, u64)> {
+    let cpath = match CString::new(path) { Ok(c) => c, Err(_) => return None };
+    unsafe {
+        let mut s: statvfs = std::mem::zeroed();
+        if statvfs(cpath.as_ptr(), &mut s) != 0 {
+            return None;
+        }
+        let fragment = s.f_frsize as u64;
+        let total = fragment.saturating_mul(s.f_blocks as u64);
+        let avail = fragment.saturating_mul(s.f_bavail as u64);
+        Some((total, avail))
+    }
+}
 
 /// Original admin-only endpoint (kept for backwards compat)
 #[get("/api/admin/status")]
@@ -74,25 +90,15 @@ pub async fn get_server_stats(data: web::Data<AppState>, session: Session) -> im
     let (used_memory, total_memory, available_memory, uptime, cpu_count, disk_total, disk_available) = {
         let mut sys = data.sys.lock().unwrap();
         sys.refresh_memory();
-        // refresh disks in case they changed
-        sys.refresh_disks_list();
-        sys.refresh_disks();
-
-        let mut total_bytes: u64 = 0;
-        let mut avail_bytes: u64 = 0;
-        for d in sys.disks() {
-            total_bytes = total_bytes.saturating_add(d.total_space());
-            avail_bytes = avail_bytes.saturating_add(d.available_space());
-        }
-
+        let total_avail = get_fs_space("/").unwrap_or((0u64, 0u64));
         (
             sys.used_memory(),
             sys.total_memory(),
             sys.available_memory(),
             System::uptime(),
             sys.cpus().len(),
-            total_bytes,
-            avail_bytes,
+            total_avail.0,
+            total_avail.1,
         )
     };
 
@@ -180,7 +186,7 @@ pub async fn get_server_stats(data: web::Data<AppState>, session: Session) -> im
             "storage": {
                 "total_mb": bytes_to_mb(disk_total),
                 "available_mb": bytes_to_mb(disk_available),
-                "used_percent": if disk_total > 0.0 { ((bytes_to_mb(disk_total) - bytes_to_mb(disk_available)) / bytes_to_mb(disk_total) * 100.0 * 10.0).round() / 10.0 } else { 0.0 }
+                "used_percent": if disk_total > 0 { ((bytes_to_mb(disk_total) - bytes_to_mb(disk_available)) / bytes_to_mb(disk_total) * 100.0 * 10.0).round() / 10.0 } else { 0.0 }
             }
         },
         "database": {
