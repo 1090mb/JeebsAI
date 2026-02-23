@@ -9,9 +9,9 @@ use sysinfo::System;
 /// Original admin-only endpoint (kept for backwards compat)
 #[get("/api/admin/status")]
 pub async fn get_system_status(data: web::Data<AppState>, session: Session) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    if !crate::auth::is_admin_session(&session) {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin privileges required"}));
     }
 
     let mut sys = data.sys.lock().unwrap();
@@ -65,9 +65,9 @@ pub async fn health_check(data: web::Data<AppState>) -> HttpResponse {
 /// Comprehensive server stats — requires admin session
 #[get("/api/server/stats")]
 pub async fn get_server_stats(data: web::Data<AppState>, session: Session) -> impl Responder {
-    if !crate::auth::is_root_admin_session(&session) {
+    if !crate::auth::is_admin_session(&session) {
         return HttpResponse::Forbidden()
-            .json(json!({"error": "Restricted to 1090mb admin account"}));
+            .json(json!({"error": "Admin privileges required"}));
     }
 
     // ── System metrics ──

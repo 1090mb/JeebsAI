@@ -798,8 +798,8 @@ pub async fn get_my_logs(data: web::Data<AppState>, session: Session) -> impl Re
     // Do not reveal admin or root-admin activity on profile pages.
     // If the logged-in user is an admin (or the root admin `1090mb`),
     // return an empty list to avoid exposing recent admin actions.
-    let is_admin = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
-    if is_admin || username == crate::auth::ROOT_ADMIN_USERNAME {
+    let is_admin = crate::auth::is_effective_admin_session(&session);
+    if is_admin {
         let empty: Vec<LogEntry> = Vec::new();
         return HttpResponse::Ok().json(empty);
     }

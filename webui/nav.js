@@ -120,10 +120,28 @@ const JeebsNav = (function () {
             const auth = await getAuthState();
             if (auth.loggedIn) {
                 dot.className = 'dot online';
-                text.textContent = auth.username;
-                localStorage.setItem('jeebs_is_admin', auth.isAdmin ? 'true' : 'false');
-                localStorage.setItem('jeebs_username', auth.username || '');
-                localStorage.setItem('jeebs_role', auth.role || 'Reguser');
+                // Try to fetch richer session info for debugging
+                try {
+                    const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+                    if (res.ok) {
+                        const body = await res.json();
+                        // /api/auth/session returns either { session: {...} } or { identity: {...} }
+                        const info = body.session || body.identity || {};
+                        const username = info.username || auth.username || 'unknown';
+                        const role = info.role || auth.role || 'Reguser';
+                        const badges = [];
+                        if (info.is_admin || auth.isAdmin) badges.push('admin');
+                        if (info.is_trainer || auth.isTrainer) badges.push('trainer');
+                        text.textContent = username + (badges.length ? ' (' + badges.join(',') + ')' : '');
+                        localStorage.setItem('jeebs_is_admin', (info.is_admin || auth.isAdmin) ? 'true' : 'false');
+                        localStorage.setItem('jeebs_username', username || '');
+                        localStorage.setItem('jeebs_role', role || 'Reguser');
+                    } else {
+                        text.textContent = auth.username || 'Signed in';
+                    }
+                } catch (e) {
+                    text.textContent = auth.username || 'Signed in';
+                }
             } else {
                 dot.className = 'dot offline';
                 text.textContent = 'Not signed in';

@@ -31,7 +31,7 @@ pub struct ProposedUpdate {
 
 #[get("/api/admin/evolution/updates")]
 pub async fn list_updates(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
+    let is_admin = crate::auth::is_effective_admin_session(&session);
     if !is_admin {
         return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
     }
@@ -60,7 +60,7 @@ pub async fn apply_update(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
+    let is_admin = crate::auth::is_effective_admin_session(&session);
     if !is_admin {
         return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
     }
@@ -129,7 +129,7 @@ pub async fn deny_update(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
+    let is_admin = crate::auth::is_effective_admin_session(&session);
     if !is_admin {
         return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
     }
@@ -165,7 +165,7 @@ pub async fn rollback_update(
     path: web::Path<String>,
     session: Session,
 ) -> impl Responder {
-    let is_admin = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
+    let is_admin = crate::auth::is_effective_admin_session(&session);
     if !is_admin {
         return HttpResponse::Unauthorized().json(json!({"error": "Admin only"}));
     }
@@ -204,7 +204,7 @@ pub async fn rollback_update(
 // Simulation endpoint for Jeebs to "think" of an update
 #[post("/api/evolution/brainstorm")]
 pub async fn brainstorm_update(data: web::Data<AppState>, session: Session) -> impl Responder {
-    let is_admin = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
+    let is_admin = crate::auth::is_effective_admin_session(&session);
     if !is_admin {
         return HttpResponse::Unauthorized().json(json!({"error": "Admin only (for simulation trigger)"}));
     }

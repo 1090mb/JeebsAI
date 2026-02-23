@@ -157,21 +157,53 @@ pub fn is_root_admin_session(session: &Session) -> bool {
         return false;
     }
 
-    let is_admin = session
-        .get::<bool>("is_admin")
-        .ok()
-        .flatten()
-        .unwrap_or(false);
-    if !is_admin {
-        return false;
-    }
-
+    // Treat the session as root admin if the username matches the hardcoded root
+    // admin username. Do not require the `is_admin` flag because some legacy
+    // sessions or token-based logins may not set it explicitly.
     session
         .get::<String>("username")
         .ok()
         .flatten()
         .map(|u| u == ROOT_ADMIN_USERNAME)
         .unwrap_or(false)
+}
+
+/// Returns true if the session belongs to any logged-in admin user.
+pub fn is_admin_session(session: &Session) -> bool {
+    let logged_in = session
+        .get::<bool>("logged_in")
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+    if !logged_in {
+        return false;
+    }
+
+    let is_admin = session
+        .get::<bool>("is_admin")
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+    is_admin
+}
+
+/// Returns true if the session belongs to the root admin or any admin user.
+pub fn is_effective_admin_session(session: &Session) -> bool {
+    let username = session.get::<String>("username").ok().flatten();
+    let is_admin_flag = session.get::<bool>("is_admin").ok().flatten();
+    is_effective_admin_opt(username.as_deref(), is_admin_flag)
+}
+
+/// Pure helper: determine effective admin status from optional username and is_admin flag.
+/// This is useful for unit testing without constructing a `Session` object.
+pub fn is_effective_admin_opt(username: Option<&str>, is_admin_flag: Option<bool>) -> bool {
+    if is_admin_flag.unwrap_or(false) {
+        return true;
+    }
+    if let Some(u) = username {
+        return u == ROOT_ADMIN_USERNAME;
+    }
+    false
 }
 
 fn issue_token(username: &str, is_admin: bool) -> Result<String, String> {
@@ -192,7 +224,7 @@ fn issue_token(username: &str, is_admin: bool) -> Result<String, String> {
     .map_err(|e| format!("Failed to issue token: {e}"))
 }
 
-fn extract_bearer_claims(http_req: &HttpRequest) -> Option<TokenClaims> {
+pub fn extract_bearer_claims(http_req: &HttpRequest) -> Option<TokenClaims> {
     let auth_header = http_req.headers().get("authorization")?.to_str().ok()?;
     let token = auth_header.strip_prefix("Bearer ")?;
     let secret = env::var("JWT_SECRET").unwrap_or_else(|_| DEFAULT_JWT_SECRET.to_string());
@@ -745,6 +777,73 @@ pub async fn auth_status(
         is_trainer,
         token,
     })
+}
+
+// Debug endpoint to return current session values for the caller (safe for debugging).
+#[get("/api/auth/session")]
+pub async fn auth_session(data: web::Data<AppState>, session: Session, http_req: HttpRequest) -> impl Responder {
+    let logged_in = session
+        .get::<bool>("logged_in")
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+
+    // If bearer token provided, prefer those claims as identity
+    if !logged_in {
+        if let Some(claims) = extract_bearer_claims(&http_req) {
+            let role = sqlx::query("SELECT value FROM jeebs_store WHERE `key` = ?")
+                .bind(format!("user:{}", claims.username))
+                .fetch_optional(&data.db)
+                .await
+                .ok()
+                .and_then(|row| row.map(|r| r.get::<Vec<u8>, _>(0)))
+                .and_then(|raw| serde_json::from_slice::<serde_json::Value>(&raw).ok())
+                .and_then(|json| json.get("role").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .unwrap_or_else(|| "user".to_string());
+
+            let mut is_admin = is_admin_role(&role);
+            let mut is_trainer = role == "trainer" || is_super_admin_role(&role);
+            if claims.username == ROOT_ADMIN_USERNAME {
+                is_admin = true;
+                is_trainer = true;
+            }
+
+            return HttpResponse::Ok().json(json!({
+                "identity": {
+                    "username": claims.username,
+                    "is_admin": is_admin,
+                    "is_trainer": is_trainer,
+                    "role": role
+                }
+            }));
+        }
+
+        return HttpResponse::Unauthorized().json(json!({"error": "Not logged in"}));
+    }
+
+    // Build session map for logged-in session
+    let username = session.get::<String>("username").ok().flatten();
+    let role = session.get::<String>("role").ok().flatten();
+    let mut is_admin = session.get::<bool>("is_admin").ok().flatten().unwrap_or(false);
+    let mut is_trainer = session.get::<bool>("is_trainer").ok().flatten().unwrap_or(false);
+
+    // Ensure root admin shows elevated flags even if session flags missing
+    if let Some(ref uname) = username {
+        if uname == ROOT_ADMIN_USERNAME {
+            is_admin = true;
+            is_trainer = true;
+        }
+    }
+
+    HttpResponse::Ok().json(json!({
+        "session": {
+            "logged_in": true,
+            "username": username,
+            "role": role,
+            "is_admin": is_admin,
+            "is_trainer": is_trainer
+        }
+    }))
 }
 
 #[post("/api/session/ping")]
