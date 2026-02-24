@@ -236,6 +236,7 @@ async fn main() -> std::io::Result<()> {
             .service(auth::session_ping)
             .service(auth::change_username)
             .service(auth::auth_status)
+            .service(auth::auth_session)
             .service(chat::jeebs_api)
             .service(user_chat::user_chat)
             .service(user_chat::chat_preflight)
