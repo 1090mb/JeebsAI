@@ -790,59 +790,64 @@ input[type="checkbox"] {
 
 /* ── Chat Messages ───────────────────────────────────────── */
 .chat-messages {
+    flex: 1;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    background: rgba(8, 22, 31, 0.6);
+    background: rgba(8, 22, 31, 0.4);
+    box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.2);
+    margin-bottom: 16px;
     min-height: 400px;
-    max-height: 60vh;
+    max-height: 65vh;
     overflow-y: auto;
-    padding: 16px;
+    padding: 20px 24px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
     scroll-behavior: smooth;
 }
 
 .bubble {
-    border-radius: var(--radius-md);
-    padding: 12px 16px;
-    line-height: 1.5;
+    border-radius: var(--radius-lg);
+    padding: 14px 20px;
+    line-height: 1.6;
     max-width: 85%;
-    animation: bubble-in 0.4s ease;
+    animation: bubble-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     word-wrap: break-word;
     position: relative;
+    font-size: 0.95rem;
 }
 
 .bubble.user {
-    background: linear-gradient(135deg, rgba(83, 216, 251, 0.15), rgba(83, 216, 251, 0.1));
-    border: 1px solid rgba(83, 216, 251, 0.3);
+    background: linear-gradient(135deg, rgba(83, 216, 251, 0.1), rgba(83, 216, 251, 0.05));
+    border: 1px solid rgba(83, 216, 251, 0.2);
     align-self: flex-end;
     border-bottom-right-radius: 4px;
-    box-shadow: 0 2px 8px rgba(83, 216, 251, 0.1);
+    box-shadow: 0 4px 12px rgba(83, 216, 251, 0.05);
 }
 
 .bubble.jeebs {
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.08));
-    border: 1px solid rgba(251, 191, 36, 0.25);
+    background: linear-gradient(135deg, rgba(14, 28, 41, 0.8), rgba(20, 36, 52, 0.9));
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-left: 3px solid var(--accent-2);
     align-self: flex-start;
     border-bottom-left-radius: 4px;
-    box-shadow: 0 2px 8px rgba(251, 191, 36, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .bubble small {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     color: var(--muted);
     font-size: 0.75rem;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 @keyframes bubble-in {
-    from { opacity: 0; transform: translateY(10px) scale(0.95); }
+    from { opacity: 0; transform: translateY(15px) scale(0.98); }
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -1195,16 +1200,21 @@ input[type="checkbox"] {
     border-radius: 3px;
 }
 
+/* ── Chat Input Area ─────────────────────────────────────── */
 .chat-input {
-    padding: 20px 24px;
+    padding: 24px;
     border-top: 1px solid var(--border);
-    background: var(--panel-2);
+    background: var(--panel);
+    border-bottom-left-radius: var(--radius-xl);
+    border-bottom-right-radius: var(--radius-xl);
+    position: relative;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .message-form {
     display: flex;
     gap: 12px;
-    align-items: flex-end;
+    align-items: center;
 }
 
 .input-wrapper {
@@ -1214,20 +1224,23 @@ input[type="checkbox"] {
 
 .message-form input {
     width: 100%;
-    padding: 14px 16px;
+    padding: 16px 20px;
     background: var(--bg-1);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border-radius: 24px;
     color: var(--text);
-    font-size: 0.9rem;
-    transition: all var(--transition-fast);
+    font-size: 0.95rem;
+    font-family: var(--font-sans);
+    transition: all var(--transition-med);
     resize: none;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .message-form input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.1), 0 0 0 3px var(--accent-glow);
+    background: var(--bg-2);
 }
 
 .send-btn {
@@ -1539,5 +1552,82 @@ input[type="checkbox"] {
     body::before { display: none; }
     .topnav { position: static; background: white; border: none; }
     .card { break-inside: avoid; border-color: #ccc; }
-    #token-control { display: none !important; }
+}
+
+/* ── Glass Box Reasoning UI ──────────────────────────────── */
+.thought-process {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 0.85em;
+    overflow: hidden;
+    max-width: 90%;
+}
+
+.thought-summary {
+    padding: 8px 12px;
+    cursor: pointer;
+    color: #8b949e;
+    font-weight: 500;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #21262d;
+    transition: color var(--transition-fast);
+}
+
+.thought-summary:hover {
+    color: #c9d1d9;
+}
+
+.thought-content {
+    padding: 12px;
+    border-top: 1px solid #30363d;
+    color: #8b949e;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: #0d1117;
+    white-space: pre-wrap;
+    line-height: 1.5;
+}
+
+/* ── Contextual Chips ────────────────────────────────────── */
+.suggestion-chips {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.chip {
+    background: rgba(35, 134, 54, 0.2);
+    color: #3fb950;
+    border: 1px solid rgba(46, 160, 67, 0.4);
+    border-radius: 16px;
+    padding: 6px 14px;
+    font-size: 0.8em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.chip:hover {
+    background: rgba(46, 160, 67, 0.4);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+/* ── Avatar Emotions ─────────────────────────────────────── */
+.avatar-happy {
+    color: #2ea043 !important;
+}
+
+.avatar-concerned {
+    color: #da3633 !important;
+}
+
+.avatar-curious {
+    color: #a371f7 !important;
 }
