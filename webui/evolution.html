@@ -509,9 +509,9 @@
     }
 
     async function applyUpdate(id) {
-      if (!confirm("Approve this proposal?")) return;
+      if (!confirm("Are you sure you want to approve and apply this proposal?")) return;
       try {
-        const res = await safeFetch(`/api/admin/evolution/update/${id}/apply`, { method: 'POST', credentials: 'same-origin', headers: authHeaders() });
+        const res = await safeFetch(`/api/admin/evolution/apply/${id}`, { method: 'POST', credentials: 'same-origin', headers: authHeaders() });
         if (res.ok) {
           fullRefresh();
         } else {
@@ -522,9 +522,9 @@
     }
 
     async function denyUpdate(id) {
-      if (!confirm("Deny this proposal?")) return;
+      if (!confirm("Are you sure you want to deny this proposal?")) return;
       try {
-        const res = await safeFetch(`/api/admin/evolution/update/${id}/deny`, { method: 'POST', credentials: 'same-origin', headers: authHeaders() });
+        const res = await safeFetch(`/api/admin/evolution/deny/${id}`, { method: 'POST', credentials: 'same-origin', headers: authHeaders() });
         if (res.ok) {
           fullRefresh();
         } else {
