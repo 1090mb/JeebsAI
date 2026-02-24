@@ -99,7 +99,9 @@ pub async fn visualize(state: web::Data<AppState>) -> impl Responder {
                     serde_json::json!({
                         "id": id,
                         "label": node.content.original_key.clone(),
-                        "title": node.content.original_value.clone(),
+                        "title": format!("{}: {}", node.content.original_key, node.content.original_value),
+                        "group": node.content.categories.first().map(|c| c.name.clone()).unwrap_or("General".to_string()),
+                        "value": (node.content.metadata.word_count / 10).max(5), // scale node size by content length
                     })
                 })
                 .collect();
@@ -107,7 +109,19 @@ pub async fn visualize(state: web::Data<AppState>) -> impl Responder {
             let edges: Vec<serde_json::Value> = graph
                 .edges
                 .iter()
-                .map(|e| serde_json::json!({ "from": e.from, "to": e.to }))
+                .map(|e| {
+                    let label = match &e.relationship_type {
+                        RelationType::Custom(s) => s.clone(),
+                        _ => format!("{:?}", e.relationship_type),
+                    };
+                    serde_json::json!({ 
+                        "from": e.from, 
+                        "to": e.to,
+                        "label": label,
+                        "arrows": "to",
+                        "font": { "size": 10, "color": "#A1A1AA" }
+                    })
+                })
                 .collect();
 
             HttpResponse::Ok().json(serde_json::json!({ "nodes": nodes, "edges": edges }))

@@ -541,6 +541,7 @@ pub async fn build_knowledge_graph(
         }
     }
 
+    graph.discover_edges();
     Ok(graph)
 }
 
@@ -621,6 +622,44 @@ impl KnowledgeGraph {
             .get(category)
             .map(|ids| ids.clone())
             .unwrap_or_default()
+    }
+
+    pub fn discover_edges(&mut self) {
+        let mut new_edges = Vec::new();
+
+        // 1. Shared entities
+        for (entity, node_ids) in &self.entity_index {
+            if node_ids.len() > 1 && node_ids.len() < 30 {
+                for i in 0..node_ids.len() {
+                    for j in i + 1..node_ids.len() {
+                        new_edges.push(GraphEdge {
+                            from: node_ids[i].clone(),
+                            to: node_ids[j].clone(),
+                            relationship_type: RelationType::Custom(format!("entity:{}", entity)),
+                            strength: 0.8,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 2. Shared categories
+        for (category, node_ids) in &self.categories {
+            if node_ids.len() > 1 && node_ids.len() < 20 {
+                for i in 0..node_ids.len() {
+                    for j in i + 1..node_ids.len() {
+                        new_edges.push(GraphEdge {
+                            from: node_ids[i].clone(),
+                            to: node_ids[j].clone(),
+                            relationship_type: RelationType::Custom(format!("category:{}", category)),
+                            strength: 0.5,
+                        });
+                    }
+                }
+            }
+        }
+
+        self.edges.extend(new_edges);
     }
 
     pub fn to_json(&self) -> Value {

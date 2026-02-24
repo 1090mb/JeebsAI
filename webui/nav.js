@@ -16,6 +16,20 @@ const JeebsNav = (function () {
         { id: 'status', label: 'Status', href: '/webui/status.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'] },
     ];
 
+    let currentActiveId = 'home';
+
+    // TrustedHTML bypass policy for security-hardened browsers
+    let policy = { createHTML: (s) => s };
+    if (window.trustedTypes && window.trustedTypes.createPolicy) {
+        try {
+            policy = window.trustedTypes.createPolicy('jeebs-nav-policy', {
+                createHTML: (string) => string
+            });
+        } catch (e) {
+            console.warn("TrustedTypes policy creation failed:", e);
+        }
+    }
+
     // Admin/Trainer/Advanced navigation
     const ADMIN_PAGES = [
         { id: 'admin', label: 'Admin', href: '/webui/admin_dashboard.html', roles: ['Admin', 'super_admin'] },
@@ -76,7 +90,7 @@ const JeebsNav = (function () {
         }
 
         container.className = 'sidebar';
-        container.innerHTML = `
+        container.innerHTML = policy.createHTML(`
             <div class="sidebar-header">
                 ${LOGO_SVG}
                 <span>JeebsAI</span>
@@ -91,7 +105,7 @@ const JeebsNav = (function () {
                     <span id="navStatusText">Checking...</span>
                 </div>
             </div>
-        `;
+        `);
 
         // Inject Mobile Navbar globally if not already present
         if (!document.getElementById('mobileNavHeader')) {
@@ -139,6 +153,7 @@ const JeebsNav = (function () {
     }
 
     async function checkStatus() {
+        const prevRole = localStorage.getItem('jeebs_role');
         const dot = document.getElementById('navDot');
         const text = document.getElementById('navStatusText');
         if (!dot || !text) return;
@@ -176,6 +191,11 @@ const JeebsNav = (function () {
                 localStorage.removeItem('jeebs_username');
                 localStorage.removeItem('jeebs_role');
             }
+
+            // If the role changed significantly (from Guest to something else), re-render the link list
+            if (prevRole !== localStorage.getItem('jeebs_role')) {
+                render(currentActiveId);
+            }
         } catch (e) {
             dot.className = 'dot offline';
             text.textContent = 'Offline';
@@ -207,10 +227,11 @@ const JeebsNav = (function () {
 
     return {
         init: function (activeId) {
+            currentActiveId = activeId || 'home';
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function () { render(activeId); });
+                document.addEventListener('DOMContentLoaded', function () { render(currentActiveId); });
             } else {
-                render(activeId);
+                render(currentActiveId);
             }
         },
         refresh: checkStatus,
