@@ -1,3 +1,0 @@
-# Docker support removed.
-# This unit file is intentionally left as a placeholder.
-# Use `jeebs.service` for non-Docker systemd runs.

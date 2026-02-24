@@ -1,159 +1,390 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Evolution Dashboard - JeebsAI</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/webui/style.css"/>
-<style>
-.live-dot{width:10px;height:10px;border-radius:50%;background:var(--good);display:inline-block}
-.live-dot.off{background:var(--muted)}
-.live-dot:not(.off){animation:pulse-ring 2s ease-out infinite}
-@keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(74,222,128,.5)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
-.severity{padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:600;text-transform:uppercase}
-.severity.high{background:rgba(248,113,113,.15);color:#f87171}
-.severity.medium{background:rgba(251,191,36,.15);color:#fbbf24}
-.severity.low{background:rgba(74,222,128,.15);color:#4ade80}
-.status{padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:600}
-.status.pending{background:rgba(96,165,250,.12);color:#60a5fa}
-.status.applied{background:rgba(74,222,128,.12);color:#4ade80}
-.status.denied{background:rgba(248,113,113,.12);color:#f87171}
-.update-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.session-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
-.session-row:last-child{border-bottom:none}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Evolution Dashboard - JeebsAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/webui/style.css" />
+  <style>
+    .live-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--good);
+      display: inline-block
+    }
 
-/* Proposal Cards */
-.proposal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
-.proposal-card { background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; padding: 16px; transition: transform 0.2s, border-color 0.2s; display: flex; flex-direction: column; }
-.proposal-card:hover { transform: translateY(-2px); border-color: var(--accent); }
-.proposal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-.proposal-title { font-weight: 700; font-size: 1.05em; color: var(--text); line-height: 1.3; }
-.proposal-desc { font-size: 0.9em; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5; flex: 1; }
-.proposal-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 10px; margin-top: auto; }
-.status-badge { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 0.8em; text-transform: uppercase; }
-</style>
+    .live-dot.off {
+      background: var(--muted)
+    }
+
+    .live-dot:not(.off) {
+      animation: pulse-ring 2s ease-out infinite
+    }
+
+    @keyframes pulse-ring {
+      0% {
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, .5)
+      }
+
+      70% {
+        box-shadow: 0 0 0 8px transparent
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 transparent
+      }
+    }
+
+    .severity {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: 600;
+      text-transform: uppercase
+    }
+
+    .severity.high {
+      background: rgba(248, 113, 113, .15);
+      color: #f87171
+    }
+
+    .severity.medium {
+      background: rgba(251, 191, 36, .15);
+      color: #fbbf24
+    }
+
+    .severity.low {
+      background: rgba(74, 222, 128, .15);
+      color: #4ade80
+    }
+
+    .status {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: 600
+    }
+
+    .status.pending {
+      background: rgba(96, 165, 250, .12);
+      color: #60a5fa
+    }
+
+    .status.applied {
+      background: rgba(74, 222, 128, .12);
+      color: #4ade80
+    }
+
+    .status.denied {
+      background: rgba(248, 113, 113, .12);
+      color: #f87171
+    }
+
+    .update-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px
+    }
+
+    .session-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .session-row:last-child {
+      border-bottom: none
+    }
+
+    /* Proposal Cards */
+    .proposal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .proposal-card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: transform 0.2s, border-color 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .proposal-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+
+    .proposal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .proposal-title {
+      font-weight: 700;
+      font-size: 1.05em;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .proposal-desc {
+      font-size: 0.9em;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    .proposal-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85em;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      margin-top: auto;
+    }
+
+    .status-badge {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.8em;
+      text-transform: uppercase;
+    }
+  </style>
 </head>
+
 <body>
-<nav id="topnav"></nav>
-<div class="shell" style="padding-top:60px;max-width:1000px">
-  <div class="card card-glow" style="margin-bottom:24px;text-align:center">
-    <h1 style="margin-bottom:8px">Evolution Dashboard</h1>
-    <p class="text-muted">Brain metrics, self-evolution proposals, and autonomous thinking.</p>
-    <div id="auth-debug-banner" style="margin-top:8px"></div>
-  </div>
+  <nav id="topnav"></nav>
+  <div class="shell" style="padding-top:60px;max-width:1000px">
+    <div class="card card-glow" style="margin-bottom:24px;text-align:center">
+      <h1 style="margin-bottom:8px">Evolution Dashboard</h1>
+      <p class="text-muted">Brain metrics, self-evolution proposals, and autonomous thinking.</p>
+      <div id="auth-debug-banner" style="margin-top:8px"></div>
+    </div>
 
-  <!-- Metrics -->
-  <div class="metrics-grid" style="margin-bottom:24px">
-    <div class="metric-card"><div id="m-brain-nodes" class="metric-value">-</div><div class="metric-label">Brain Nodes</div></div>
-    <div class="metric-card"><div id="m-learned-facts" class="metric-value">-</div><div class="metric-label">Learned Facts</div></div>
-    <div class="metric-card"><div id="m-chats-24h" class="metric-value">-</div><div class="metric-label">Chats (24h)</div></div>
-    <div class="metric-card"><div id="m-proposals" class="metric-value">-</div><div class="metric-label">Proposals</div></div>
-    <div class="metric-card"><div id="m-cycles" class="metric-value">-</div><div class="metric-label">Think Cycles</div></div>
-    <div class="metric-card"><div id="m-unanswered" class="metric-value">-</div><div class="metric-label">Unanswered</div></div>
-    <div class="metric-card"><div id="m-warnings" class="metric-value">-</div><div class="metric-label">Warnings</div></div>
-    <div class="metric-card"><div id="m-errors" class="metric-value">-</div><div class="metric-label">Errors</div></div>
-  </div>
-
-  <!-- Thinker & Topics -->
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-bottom:24px">
-    <div class="card card-glow">
-      <h3>Autonomous Thinker</h3>
-      <div class="data-list">
-        <div class="data-list-item"><span>Status</span><span class="row" style="gap:6px"><span id="thinker-dot" class="live-dot off"></span><span id="thinker-status">UNKNOWN</span></span></div>
-        <div class="data-list-item"><span>Knowledge Drive</span><span id="thinker-drive" style="font-weight:700">0%</span></div>
+    <!-- Metrics -->
+    <div class="metrics-grid" style="margin-bottom:24px">
+      <div class="metric-card">
+        <div id="m-brain-nodes" class="metric-value">-</div>
+        <div class="metric-label">Brain Nodes</div>
       </div>
-      <div class="progress" id="drive-bar" style="margin:8px 0"><div class="progress-fill" style="width:0%"></div></div>
-      <div class="data-list">
-        <div class="data-list-item"><span>Last Cycle</span><span id="thinker-last-cycle" class="text-muted">n/a</span></div>
-        <div class="data-list-item"><span>Last Reason</span><span id="thinker-reason" class="text-muted">n/a</span></div>
+      <div class="metric-card">
+        <div id="m-learned-facts" class="metric-value">-</div>
+        <div class="metric-label">Learned Facts</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-chats-24h" class="metric-value">-</div>
+        <div class="metric-label">Chats (24h)</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-proposals" class="metric-value">-</div>
+        <div class="metric-label">Proposals</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-cycles" class="metric-value">-</div>
+        <div class="metric-label">Think Cycles</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-unanswered" class="metric-value">-</div>
+        <div class="metric-label">Unanswered</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-warnings" class="metric-value">-</div>
+        <div class="metric-label">Warnings</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-errors" class="metric-value">-</div>
+        <div class="metric-label">Errors</div>
       </div>
     </div>
-    <div class="card">
-      <h3>Unknown Topics</h3>
-      <div id="unknown-topics" class="scroll-box" style="max-height:200px"><span class="text-muted">Loading...</span></div>
+
+    <!-- Thinker & Topics -->
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-bottom:24px">
+      <div class="card card-glow">
+        <h3>Autonomous Thinker</h3>
+        <div class="data-list">
+          <div class="data-list-item"><span>Status</span><span class="row" style="gap:6px"><span id="thinker-dot"
+                class="live-dot off"></span><span id="thinker-status">UNKNOWN</span></span></div>
+          <div class="data-list-item"><span>Knowledge Drive</span><span id="thinker-drive"
+              style="font-weight:700">0%</span></div>
+        </div>
+        <div class="progress" id="drive-bar" style="margin:8px 0">
+          <div class="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="data-list">
+          <div class="data-list-item"><span>Last Cycle</span><span id="thinker-last-cycle" class="text-muted">n/a</span>
+          </div>
+          <div class="data-list-item"><span>Last Reason</span><span id="thinker-reason" class="text-muted">n/a</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Unknown Topics</h3>
+        <div id="unknown-topics" class="scroll-box" style="max-height:200px"><span class="text-muted">Loading...</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Proposals -->
+    <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2 style="margin:0">Proposed Changes</h2>
+      <select id="statusFilter" class="form-input" onchange="renderUpdates()" style="width:auto;padding:6px 12px">
+        <option value="all">All</option>
+        <option value="pending">Pending</option>
+        <option value="applied">Applied</option>
+        <option value="denied">Denied</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="fullRefresh()">Refresh</button>
+    </div>
+    <div id="updates-list">
+      <div class="text-muted" style="padding:30px;text-align:center">Loading proposals...</div>
+    </div>
+
+    <!-- Active Sessions -->
+    <div class="card" style="margin-top:24px">
+      <h3>Active Sessions</h3>
+      <div id="active-sessions" class="scroll-box" style="max-height:250px"><span class="text-muted">Loading
+          sessions...</span></div>
     </div>
   </div>
 
+  <script src="/webui/auth.js"></script>
+  <script src="/webui/nav.js"></script>
+  <script>
+    JeebsNav.init("evolution");
 
-  <!-- Proposals -->
-  <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-    <h2 style="margin:0">Proposed Changes</h2>
-    <select id="statusFilter" class="form-input" onchange="renderUpdates()" style="width:auto;padding:6px 12px">
-      <option value="all">All</option>
-      <option value="pending">Pending</option>
-      <option value="applied">Applied</option>
-      <option value="denied">Denied</option>
-    </select>
-    <button class="btn btn-ghost btn-sm" onclick="fullRefresh()">Refresh</button>
-  </div>
-  <div id="updates-list"><div class="text-muted" style="padding:30px;text-align:center">Loading proposals...</div></div>
+    let allUpdates = [];
 
-  <!-- Active Sessions -->
-  <div class="card" style="margin-top:24px">
-    <h3>Active Sessions</h3>
-    <div id="active-sessions" class="scroll-box" style="max-height:250px"><span class="text-muted">Loading sessions...</span></div>
-  </div>
-</div>
+    async function init() {
+      await requireAuth("admin");
+      fullRefresh();
+    }
 
-<script src="/webui/auth.js"></script>
-<script src="/webui/nav.js"></script>
-<script>
-JeebsNav.init("evolution");
+    async function fullRefresh() {
+      loadUpdates();
+      loadStats();
+    }
 
-let allUpdates = [];
+    async function loadStats() {
+      try {
+        const res = await safeFetch("/api/evolution/stats", { credentials: "same-origin", headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
 
-async function init() {
-  await requireAuth("admin");
-  fullRefresh();
-}
+        // Update metrics
+        if (data.brain) {
+          document.getElementById("m-brain-nodes").textContent = data.brain.nodes || 0;
+          document.getElementById("m-learned-facts").textContent = data.brain.learned_facts || 0;
+          document.getElementById("m-chats-24h").textContent = data.brain.chat_logs_24h || 0;
+          document.getElementById("m-unanswered").textContent = data.brain.unanswered_24h || 0;
+          document.getElementById("m-warnings").textContent = data.brain.warnings_24h || 0;
+          document.getElementById("m-errors").textContent = data.brain.errors_24h || 0;
 
-async function fullRefresh() {
-  loadUpdates();
-  // Load other metrics if endpoints exist
-}
+          // Update Thinker Drive
+          const drivePct = Math.round((data.brain.knowledge_drive || 0) * 100);
+          document.getElementById("thinker-drive").textContent = `${drivePct}%`;
+          document.querySelector("#drive-bar .progress-fill").style.width = `${drivePct}%`;
 
-async function loadUpdates() {
-  const container = document.getElementById("updates-list");
-  container.innerHTML = '<div class="text-muted" style="padding:30px;text-align:center">Loading proposals...</div>';
-  try {
-    const res = await safeFetch("/api/admin/evolution/updates", {credentials: "same-origin", headers: authHeaders()});
-    if (!res.ok) throw new Error("Failed to load");
-    const data = await res.json();
-    allUpdates = data.updates || [];
-    renderUpdates();
-  } catch (e) {
-    container.innerHTML = `<div class="text-danger" style="padding:20px;text-align:center">Error loading proposals: ${e.message}</div>`;
-  }
-}
+          // Update Unknown Topics
+          const topicsBox = document.getElementById("unknown-topics");
+          if (data.brain.top_unknown_topics && data.brain.top_unknown_topics.length > 0) {
+            topicsBox.innerHTML = '<ul style="margin:0;padding-left:20px">' +
+              data.brain.top_unknown_topics.map(t => `<li style="margin-bottom:4px">${escapeHtml(t.topic)} <span class="text-muted">(${t.count} asks)</span></li>`).join('') +
+              '</ul>';
+          } else {
+            topicsBox.innerHTML = '<span class="text-muted">No unknown topics detected recently.</span>';
+          }
+        }
 
-function renderUpdates() {
-  const filter = document.getElementById("statusFilter").value;
-  const container = document.getElementById("updates-list");
-  
-  const filtered = allUpdates.filter(u => filter === 'all' || u.status === filter);
-  
-  if (filtered.length === 0) {
-    container.innerHTML = '<div class="text-muted" style="text-align:center;padding:40px;background:var(--bg-1);border-radius:8px;border:1px solid var(--border)">No proposals found matching this filter.</div>';
-    return;
-  }
+        // Update Proposals Metric
+        if (data.proposals) {
+          document.getElementById("m-proposals").textContent = data.proposals.total || 0;
+        }
 
-  container.className = "proposal-grid";
-  container.innerHTML = filtered.map(u => {
-    const statusClass = u.status === 'applied' ? 'status-applied' : (u.status === 'denied' ? 'status-denied' : 'status-pending');
-    const icon = u.feeling === 'like' ? '👍' : (u.feeling === 'dislike' ? '👎' : '💡');
-    
-    let actions = '';
-    if(u.status === 'pending') {
-        actions = `
+        // Update Thinker Status
+        if (data.thinker) {
+          document.getElementById("m-cycles").textContent = data.thinker.total_cycles || 0;
+          document.getElementById("thinker-status").textContent = (data.thinker.status || "UNKNOWN").toUpperCase();
+
+          const dot = document.getElementById("thinker-dot");
+          if (data.thinker.status === "running") {
+            dot.className = "live-dot";
+          } else {
+            dot.className = "live-dot off";
+          }
+
+          if (data.thinker.last_cycle_at) {
+            document.getElementById("thinker-last-cycle").textContent = new Date(data.thinker.last_cycle_at).toLocaleString();
+          }
+          if (data.thinker.last_reason) {
+            document.getElementById("thinker-reason").textContent = data.thinker.last_reason;
+          }
+        }
+
+      } catch (e) {
+        console.warn("Failed to load evolution stats", e);
+      }
+    }
+
+    async function loadUpdates() {
+      const container = document.getElementById("updates-list");
+      container.innerHTML = '<div class="text-muted" style="padding:30px;text-align:center">Loading proposals...</div>';
+      try {
+        const res = await safeFetch("/api/admin/evolution/updates", { credentials: "same-origin", headers: authHeaders() });
+        if (!res.ok) throw new Error("Failed to load");
+        const data = await res.json();
+        allUpdates = data.updates || [];
+        renderUpdates();
+      } catch (e) {
+        container.innerHTML = `<div class="text-danger" style="padding:20px;text-align:center">Error loading proposals: ${e.message}</div>`;
+      }
+    }
+
+    function renderUpdates() {
+      const filter = document.getElementById("statusFilter").value;
+      const container = document.getElementById("updates-list");
+
+      const filtered = allUpdates.filter(u => filter === 'all' || u.status === filter);
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="text-muted" style="text-align:center;padding:40px;background:var(--bg-1);border-radius:8px;border:1px solid var(--border)">No proposals found matching this filter.</div>';
+        return;
+      }
+
+      container.className = "proposal-grid";
+      container.innerHTML = filtered.map(u => {
+        const statusClass = u.status === 'applied' ? 'status-applied' : (u.status === 'denied' ? 'status-denied' : 'status-pending');
+        const icon = u.feeling === 'like' ? '👍' : (u.feeling === 'dislike' ? '👎' : '💡');
+
+        let actions = '';
+        if (u.status === 'pending') {
+          actions = `
         <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px">
             <button class="btn btn-danger btn-sm" onclick="denyUpdate('${u.id}')">Deny</button>
             <button class="btn btn-primary btn-sm" onclick="applyUpdate('${u.id}')">Approve</button>
         </div>`;
-    }
-    
-    return `
+        }
+
+        return `
     <div class="proposal-card">
         <div class="proposal-header">
             <div class="proposal-title">${escapeHtml(u.title || 'Untitled')}</div>
@@ -167,38 +398,39 @@ function renderUpdates() {
         ${actions}
     </div>
     `;
-  }).join('');
-}
+      }).join('');
+    }
 
-async function applyUpdate(id) {
-    if(!confirm("Approve this proposal?")) return;
-    try {
+    async function applyUpdate(id) {
+      if (!confirm("Approve this proposal?")) return;
+      try {
         const res = await safeFetch(`/api/admin/evolution/update/${id}/apply`, { method: 'POST', credentials: 'same-origin', headers: authHeaders() });
-        if(res.ok) {
-            fullRefresh();
+        if (res.ok) {
+          fullRefresh();
         } else {
-            const txt = await res.text();
-            alert("Failed to approve: " + txt);
+          const txt = await res.text();
+          alert("Failed to approve: " + txt);
         }
-    } catch(e) { alert(e); }
-}
+      } catch (e) { alert(e); }
+    }
 
-async function denyUpdate(id) {
-    if(!confirm("Deny this proposal?")) return;
-    try {
+    async function denyUpdate(id) {
+      if (!confirm("Deny this proposal?")) return;
+      try {
         const res = await safeFetch(`/api/admin/evolution/update/${id}/deny`, { method: 'POST', credentials: 'same-origin', headers: authHeaders() });
-        if(res.ok) {
-            fullRefresh();
+        if (res.ok) {
+          fullRefresh();
         } else {
-            const txt = await res.text();
-            alert("Failed to deny: " + txt);
+          const txt = await res.text();
+          alert("Failed to deny: " + txt);
         }
-    } catch(e) { alert(e); }
-}
+      } catch (e) { alert(e); }
+    }
 
-function escapeHtml(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+    function escapeHtml(s) { if (!s) return ""; return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-init();
-</script>
+    init();
+  </script>
 </body>
+
 </html>

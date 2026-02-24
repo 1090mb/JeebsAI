@@ -99,9 +99,9 @@ async function requireAuth(role) {
 
     // If not logged in and no token, restrict access
     if (!auth.loggedIn && !jeebsGetToken()) {
-        // If not on index.html, redirect to register
+        // If not on index.html or root, redirect to register
         const path = window.location.pathname;
-        if (!path.endsWith('index.html')) {
+        if (!path.endsWith('index.html') && path !== '/' && path !== '/webui/') {
             window.location.replace('/webui/index.html#register');
         }
     }

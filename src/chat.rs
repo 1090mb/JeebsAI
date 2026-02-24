@@ -3,7 +3,7 @@ use actix_web::{post, web, HttpRequest, HttpResponse, Responder};
 use chrono::Local;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+// json removed
 use std::env;
 use std::io::Write;
 
@@ -63,15 +63,10 @@ pub async fn jeebs_api(
     session: Session,
     http_req: HttpRequest,
 ) -> impl Responder {
-    let mut logged_in = session
-        .get::<bool>("logged_in")
-        .unwrap_or(Some(false))
-        .unwrap_or(false);
     let mut username = session.get::<String>("username").unwrap_or(None);
 
-    if !logged_in || username.is_none() {
+    if username.is_none() {
         if let Some(claims) = extract_bearer_claims(&http_req) {
-            logged_in = true;
             username = Some(claims.username.clone());
             let _ = session.insert("logged_in", true);
             let _ = session.insert("username", &claims.username);
@@ -79,19 +74,8 @@ pub async fn jeebs_api(
         }
     }
 
-    if !logged_in {
-        logging::log(
-            &data.db,
-            "WARN",
-            "CHAT",
-            &format!(
-                "Rejected chat request from unauthenticated client ip={}",
-                peer_addr(&http_req)
-            ),
-        )
-        .await;
-        return HttpResponse::Unauthorized().json(json!({"error": "Not logged in"}));
-    }
+    // If not logged in, we allow anonymous chat.
+    // Instead of rejecting, we just proceed.
     let db = &data.db;
     let prompt = req.prompt.trim();
     let username_for_log = username
