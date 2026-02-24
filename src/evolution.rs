@@ -208,12 +208,17 @@ fn require_root_admin(session: &Session) -> Result<String, HttpResponse> {
 }
 
 fn require_manual_proposal_actor(session: &Session) -> Result<String, HttpResponse> {
-    let actor = require_root_admin(session)?;
-    if actor != crate::auth::ROOT_ADMIN_USERNAME {
+    if !crate::auth::is_effective_admin_session(session) {
         return Err(HttpResponse::Forbidden().json(
-            json!({"error": "Only the 1090mb admin account can apply or approve proposals"}),
+            json!({"error": "Only administrators can apply or approve proposals"}),
         ));
     }
+
+    let actor = session
+        .get::<String>("username")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "admin".to_string());
 
     let actor_lower = actor.to_ascii_lowercase();
     if actor_lower.contains("jeebs")

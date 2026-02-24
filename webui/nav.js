@@ -10,26 +10,26 @@ const JeebsNav = (function () {
 
     // General navigation
     const PAGES = [
-        { id: 'home', label: 'Console', href: '/webui/index.html', roles: ['Admin', 'Mod', 'Trainer', 'Reguser'] },
-        { id: 'profile', label: 'Profile', href: '/webui/profile.html', roles: ['Admin', 'Mod', 'Trainer', 'Reguser'] },
-        { id: 'search', label: 'Brain Search', href: '/webui/search.html', roles: ['Admin', 'Mod', 'Trainer', 'Reguser'] },
-        { id: 'status', label: 'Status', href: '/webui/status.html', roles: ['Admin', 'Mod', 'Trainer'] },
+        { id: 'home', label: 'Console', href: '/webui/index.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer', 'Reguser', 'Guest'] },
+        { id: 'profile', label: 'Profile', href: '/webui/profile.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer', 'Reguser'] },
+        { id: 'search', label: 'Brain Search', href: '/webui/search.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer', 'Reguser'] },
+        { id: 'status', label: 'Status', href: '/webui/status.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'] },
     ];
 
     // Admin/Trainer/Advanced navigation
     const ADMIN_PAGES = [
-        { id: 'admin', label: 'Admin', href: '/webui/admin_dashboard.html', roles: ['Admin'] },
-        { id: 'users', label: 'Users', href: '/webui/admin_users.html', roles: ['Admin'] },
-        { id: 'trainer', label: 'Trainer', href: '/webui/trainer_panel.html', roles: ['Admin', 'Mod', 'Trainer'] },
-        { id: 'resources', label: 'Resources', href: '/webui/trainer_resources.html', roles: ['Admin', 'Mod', 'Trainer'] },
-        { id: 'logs', label: 'Logs', href: '/webui/logs.html', roles: ['Admin'] },
-        { id: 'evolution', label: 'Evolution', href: '/webui/evolution.html', roles: ['Admin'] },
-        { id: 'brain', label: 'Brain Graph', href: '/webui/visualize.html', roles: ['Admin', 'Mod', 'Trainer'] },
-        { id: 'logic', label: 'Logic Graph', href: '/webui/logic_visualize.html', roles: ['Admin', 'Mod', 'Trainer'] },
-        { id: 'blacklist', label: 'Blacklist', href: '/webui/admin_blacklist.html', roles: ['Admin', 'Mod'] },
-        { id: 'whitelist', label: 'Whitelist', href: '/webui/admin_whitelist.html', roles: ['Admin', 'Mod'] },
-        { id: 'anomalies', label: 'Anomalies', href: '/webui/admin_anomalies.html', roles: ['Admin'] },
-        { id: 'reasoning', label: 'Reasoning', href: '/webui/admin_reasoning.html', roles: ['Admin'] },
+        { id: 'admin', label: 'Admin', href: '/webui/admin_dashboard.html', roles: ['Admin', 'super_admin'] },
+        { id: 'users', label: 'Users', href: '/webui/admin_users.html', roles: ['Admin', 'super_admin'] },
+        { id: 'trainer', label: 'Trainer', href: '/webui/trainer_panel.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'] },
+        { id: 'resources', label: 'Resources', href: '/webui/trainer_resources.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'] },
+        { id: 'logs', label: 'Logs', href: '/webui/logs.html', roles: ['Admin', 'super_admin'] },
+        { id: 'evolution', label: 'Evolution', href: '/webui/evolution.html', roles: ['Admin', 'super_admin'] },
+        { id: 'brain', label: 'Brain Graph', href: '/webui/visualize.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'] },
+        { id: 'logic', label: 'Logic Graph', href: '/webui/logic_visualize.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'] },
+        { id: 'blacklist', label: 'Blacklist', href: '/webui/admin_blacklist.html', roles: ['Admin', 'super_admin', 'Mod'] },
+        { id: 'whitelist', label: 'Whitelist', href: '/webui/admin_whitelist.html', roles: ['Admin', 'super_admin', 'Mod'] },
+        { id: 'anomalies', label: 'Anomalies', href: '/webui/admin_anomalies.html', roles: ['Admin', 'super_admin'] },
+        { id: 'reasoning', label: 'Reasoning', href: '/webui/admin_reasoning.html', roles: ['Admin', 'super_admin'] },
     ];
 
     function render(activeId) {
@@ -39,14 +39,23 @@ const JeebsNav = (function () {
         // Determine admin/root state robustly (works even if auth.js wasn't loaded)
         const storedUsername = localStorage.getItem('jeebs_username') || '';
         let userRole = localStorage.getItem('jeebs_role') || 'Guest';
-        
-        // Hardcode root admin role check
+        let isAdmin = localStorage.getItem('jeebs_is_admin') === 'true';
+
+        // Hardcode root admin role check, just in case
         if (storedUsername === '1090mb') {
+            userRole = 'super_admin';
+            isAdmin = true;
+        } else if (isAdmin && userRole === 'Reguser') {
             userRole = 'Admin';
         }
 
         // Helper to check if current role is allowed for a page
-        const isAllowed = (page) => page.roles && page.roles.includes(userRole);
+        const isAllowed = (page) => {
+            if (page.roles.includes(userRole)) return true;
+            // Admins should see everything a regular user or trainer sees
+            if (isAdmin && (page.roles.includes('Reguser') || page.roles.includes('Trainer'))) return true;
+            return false;
+        };
 
         let linksHtml = PAGES.filter(function (p) {
             return isAllowed(p);
@@ -171,7 +180,7 @@ const JeebsNav = (function () {
     }
     updateThemeButton();
 
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         if (e.target.id === 'themeBtn') {
             const nextIndex = (themes.indexOf(currentTheme) + 1) % themes.length;
             currentTheme = themes[nextIndex];
