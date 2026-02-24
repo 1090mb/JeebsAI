@@ -1,4 +1,4 @@
-use crate::brain_parser::{build_knowledge_graph, BrainParser, ParsedBrainContent};
+use crate::brain_parser::{build_knowledge_graph, BrainParser, ParsedBrainContent, RelationType};
 use crate::state::AppState;
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
