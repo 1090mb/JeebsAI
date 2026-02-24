@@ -168,6 +168,61 @@
       font-size: 0.8em;
       text-transform: uppercase;
     }
+
+    .proposal-details {
+      margin-top: 12px;
+      font-size: 0.85em;
+      border-top: 1px dashed var(--border);
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .proposal-section-title {
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .proposal-list {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--text);
+    }
+
+    .proposal-list li {
+      margin-bottom: 3px;
+    }
+
+    .proposal-code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: var(--bg-0);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      color: var(--accent);
+    }
+
+    .view-changes-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.85em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .view-changes-btn:hover {
+      background: var(--bg-0);
+      color: var(--text);
+    }
   </style>
 </head>
 
@@ -378,19 +433,71 @@
         let actions = '';
         if (u.status === 'pending') {
           actions = `
-        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px">
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px">
             <button class="btn btn-danger btn-sm" onclick="denyUpdate('${u.id}')">Deny</button>
             <button class="btn btn-primary btn-sm" onclick="applyUpdate('${u.id}')">Approve</button>
         </div>`;
         }
 
+        let rationaleHtml = '';
+        if (u.rationale && u.rationale.length > 0) {
+          rationaleHtml = `
+          <div>
+            <div class="proposal-section-title">Why this change? (Rationale)</div>
+            <ul class="proposal-list">
+              ${u.rationale.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+            </ul>
+          </div>`;
+        }
+
+        let signalsHtml = '';
+        if (u.source_signals && u.source_signals.length > 0) {
+          signalsHtml = `
+          <div>
+            <div class="proposal-section-title">Source Signals</div>
+            <ul class="proposal-list">
+              ${u.source_signals.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+            </ul>
+          </div>`;
+        }
+
+        let changesHtml = '';
+        if (u.changes && u.changes.length > 0) {
+          changesHtml = `
+          <div>
+            <div class="proposal-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+              Files to Update (${u.changes.length})
+              <button class="view-changes-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Toggle Paths</button>
+              <ul class="proposal-list" style="display:none; margin-top:8px; width:100%;">
+                ${u.changes.map(c => `<li><span class="proposal-code">${escapeHtml(c.path)}</span> ${c.existed_before ? '(Modify)' : '(New)'}</li>`).join('')}
+              </ul>
+            </div>
+          </div>`;
+        }
+
+        let metaBadges = '';
+        if (u.severity) metaBadges += `<span class="severity ${u.severity.toLowerCase()}">${escapeHtml(u.severity)}</span>`;
+        if (u.confidence !== undefined) metaBadges += `<span class="badge" title="Confidence">Conf: ${Math.round(u.confidence * 100)}%</span>`;
+
         return `
     <div class="proposal-card">
         <div class="proposal-header">
             <div class="proposal-title">${escapeHtml(u.title || 'Untitled')}</div>
-            <div style="font-size:1.2em" title="Jeebs Feeling">${icon}</div>
+            <div style="font-size:1.2em" title="Jeebs Feeling (${Math.round((u.feeling_confidence || 0) * 100)}% certain)">${icon}</div>
         </div>
         <div class="proposal-desc">${escapeHtml(u.description || 'No description provided.')}</div>
+        
+        <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+            ${metaBadges}
+            <span class="badge" style="background:var(--bg-0)">By: ${escapeHtml(u.author || 'JeebsAI')}</span>
+        </div>
+
+        <div class="proposal-details">
+            ${rationaleHtml}
+            ${signalsHtml}
+            ${changesHtml}
+        </div>
+
         <div class="proposal-meta">
             <span>${new Date(u.created_at).toLocaleDateString()}</span>
             <span class="status-badge ${statusClass}">${u.status || 'UNKNOWN'}</span>
