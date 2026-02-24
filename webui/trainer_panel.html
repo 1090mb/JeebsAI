@@ -488,10 +488,11 @@
           var el = document.getElementById("background-runs");
           if (el) el.textContent = "Error: " + e;
         }
+      }
 
-        await loadBackgroundRuns(); setInterval(loadBackgroundRuns, 8000);
+      await loadBackgroundRuns(); setInterval(loadBackgroundRuns, 8000);
 
-        window.startExtendedRun = async function () {
+      window.startExtendedRun = async function () {
           var minutes = Number(document.getElementById("extended-minutes").value) || 10;
           var inference = !!document.getElementById("extended-inference").checked;
           var status = document.getElementById("extended-status");
