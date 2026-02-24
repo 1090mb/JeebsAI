@@ -30,6 +30,7 @@ const JeebsNav = (function () {
         { id: 'whitelist', label: 'Whitelist', href: '/webui/admin_whitelist.html', roles: ['Admin', 'super_admin', 'Mod'] },
         { id: 'anomalies', label: 'Anomalies', href: '/webui/admin_anomalies.html', roles: ['Admin', 'super_admin'] },
         { id: 'reasoning', label: 'Reasoning', href: '/webui/admin_reasoning.html', roles: ['Admin', 'super_admin'] },
+        { id: 'thoughts', label: 'Thoughts', href: '/webui/thought_monitor.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'] },
     ];
 
     function render(activeId) {

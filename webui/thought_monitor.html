@@ -1,128 +1,152 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
     <title>JeebsAI Cognitive Stream</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="/webui/style.css" />
     <style>
-        body {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #0d1117;
-            color: #c9d1d9;
-            padding: 20px;
-            margin: 0;
-        }
-        .container {
+        .thought-container {
             max-width: 800px;
             margin: 0 auto;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            background-color: #161b22;
+        }
+
+        .monologue-card {
+            margin-top: 24px;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .monologue-content {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: var(--text);
             padding: 20px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            background: var(--bg-0);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            white-space: pre-wrap;
         }
-        h2 {
-            color: #58a6ff;
-            border-bottom: 1px solid #30363d;
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-        .thought-box {
-            margin-top: 20px;
-        }
-        .label {
-            font-size: 0.8em;
-            color: #8b949e;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-        }
-        .monologue {
-            font-size: 1.1em;
-            color: #e6edf3;
-            background: #0d1117;
-            padding: 15px;
-            border-left: 4px solid #238636;
-            border-radius: 4px;
-            min-height: 40px;
-        }
-        .meta-grid {
+
+        .meta-stats {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 24px;
         }
-        .meta-item {
-            background: #21262d;
-            padding: 10px;
-            border-radius: 4px;
+
+        .sentiment-value {
+            font-size: 2rem;
+            font-weight: 700;
         }
-        .highlight { color: #d2a8ff; }
-        .sentiment-pos { color: #7ee787; }
-        .sentiment-neg { color: #ff7b72; }
-        .refresh-status {
-            font-size: 0.8em;
-            color: #8b949e;
+
+        .pos {
+            color: var(--good);
+        }
+
+        .neg {
+            color: var(--bad);
+        }
+
+        .refresh-notice {
             text-align: right;
-            margin-top: 10px;
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: var(--muted);
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h2>🧠 JeebsAI Cognitive Stream</h2>
-        
-        <div class="thought-box">
-            <div class="label">Internal Monologue</div>
-            <div id="monologue" class="monologue">Waiting for input...</div>
-        </div>
 
-        <div class="meta-grid">
-            <div class="meta-item">
-                <div class="label">Sentiment Valence</div>
-                <div id="sentiment">0.0</div>
+<body>
+    <div id="app-layout">
+        <aside id="sidebar-container" data-active="thoughts"></aside>
+        <main class="main-content">
+            <div class="shell" style="max-width:1000px">
+                <div class="header" style="margin-bottom: 32px;">
+                    <h1>🧠 Cognitive Stream</h1>
+                    <p class="text-secondary">Real-time monitoring of JeebsAI's internal monologue and cognitive state.
+                    </p>
+                </div>
+
+                <div class="thought-container">
+                    <div class="card monologue-card">
+                        <div class="card-header">
+                            <h3>Internal Monologue</h3>
+                            <span class="badge badge-info">Live</span>
+                        </div>
+                        <div id="monologue" class="monologue-content">Waiting for input...</div>
+                    </div>
+
+                    <div class="meta-stats">
+                        <div class="card">
+                            <h3>Sentiment Valence</h3>
+                            <div id="sentiment" class="sentiment-value">0.00</div>
+                        </div>
+                        <div class="card">
+                            <h3>Cognitive Angle</h3>
+                            <div id="angle" class="sentiment-value" style="font-size: 1.2rem; color: var(--accent);">
+                                -
+                            </div>
+                        </div>
+                        <div class="card">
+                            <h3>Curiosity Target</h3>
+                            <div id="curiosity" class="sentiment-value"
+                                style="font-size: 1.2rem; color: var(--warning);">
+                                -
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="refresh-notice">
+                        Auto-refreshing every 1s • Session: <span id="session-id">...</span>
+                    </div>
+                </div>
             </div>
-            <div class="meta-item">
-                <div class="label">Cognitive Angle</div>
-                <div id="angle" class="highlight">-</div>
-            </div>
-            <div class="meta-item">
-                <div class="label">Curiosity Target</div>
-                <div id="curiosity">-</div>
-            </div>
-        </div>
-        <div class="refresh-status">Auto-refreshing every 1s</div>
+        </main>
     </div>
 
+    <script src="/webui/auth.js"></script>
+    <script src="/webui/nav.js"></script>
     <script>
-        // Default to a generic session ID or allow URL param ?user=xyz
         const urlParams = new URLSearchParams(window.location.search);
-        const userId = urlParams.get('user') || 'session:default'; // Adjust based on your auth
+        const userId = urlParams.get('user') || 'session:default';
+        document.getElementById('session-id').textContent = userId;
 
         async function fetchThought() {
             try {
-                // Note: You might need to adjust the user ID logic depending on how your chat client identifies users
-                // For testing, you can hardcode the ID you see in the database
-                const response = await fetch(`/api/brain/thought/${encodeURIComponent(userId)}`);
+                const response = await safeFetch(`/api/brain/thought/${encodeURIComponent(userId)}`, {
+                    headers: authHeaders()
+                });
                 const data = await response.json();
 
                 if (data.success && data.thought) {
                     const t = data.thought;
-                    document.getElementById('monologue').innerText = t.internal_monologue;
-                    
-                    const sentEl = document.getElementById('sentiment');
-                    sentEl.innerText = t.detected_sentiment.toFixed(2);
-                    sentEl.className = t.detected_sentiment > 0.2 ? 'sentiment-pos' : (t.detected_sentiment < -0.2 ? 'sentiment-neg' : '');
+                    document.getElementById('monologue').textContent = t.internal_monologue;
 
-                    document.getElementById('angle').innerText = t.suggested_angle;
-                    document.getElementById('curiosity').innerText = t.curiosity_target || "None";
+                    const sentEl = document.getElementById('sentiment');
+                    sentEl.textContent = t.detected_sentiment.toFixed(2);
+                    sentEl.className = 'sentiment-value ' + (t.detected_sentiment > 0.2 ? 'pos' : (t.detected_sentiment < -0.2 ? 'neg' : ''));
+
+                    document.getElementById('angle').textContent = t.suggested_angle || '-';
+                    document.getElementById('curiosity').textContent = t.curiosity_target || "None";
                 }
             } catch (e) {
                 console.error("Failed to fetch thought:", e);
             }
         }
 
+        JeebsNav.init('thoughts');
         setInterval(fetchThought, 1000);
         fetchThought();
     </script>
 </body>
+
 </html>
