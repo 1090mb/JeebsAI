@@ -318,6 +318,25 @@
 
     <!-- Active Sessions -->
     <div class="card" style="margin-top:24px">
+          <!-- Autonomous Learning Live Feed -->
+          <div class="card card-glow" style="margin-bottom:24px">
+            <h3>🧠 JeebsAI Live Feed</h3>
+            <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <label style="font-size:0.95em">Show:</label>
+              <select id="feedTypeFilter" class="form-input" style="width:auto" onchange="renderUnifiedFeed()">
+                <option value="all">All</option>
+                <option value="learning">Learning</option>
+                <option value="thinking">Thinking</option>
+                <option value="search">Web Search</option>
+                <option value="proposing">Proposals</option>
+              </select>
+              <input id="feedSearch" class="form-input" style="width:180px" placeholder="Search feed..." oninput="renderUnifiedFeed()" />
+              <button class="btn btn-ghost btn-sm" onclick="refreshUnifiedFeed()">Refresh</button>
+            </div>
+            <div id="unified-live-feed" class="scroll-box" style="max-height:220px;overflow-y:auto;background:var(--bg-1);border:1px solid var(--border);padding:8px 12px;font-size:0.98em">
+              <span class="text-muted">Waiting for activity...</span>
+            </div>
+          </div>
       <h3>Active Sessions</h3>
       <div id="active-sessions" class="scroll-box" style="max-height:250px"><span class="text-muted">Loading
           sessions...</span></div>
@@ -326,6 +345,71 @@
 
   <script src="/webui/auth.js"></script>
   <script src="/webui/nav.js"></script>
+  <script>
+    // Unified JeebsAI Live Feed logic
+    let unifiedFeedEvents = [];
+    async function refreshUnifiedFeed() {
+      const el = document.getElementById('unified-live-feed');
+      if (!el) return;
+      el.innerHTML = '<span class="text-muted">Loading...</span>';
+      try {
+        const res = await fetch('/api/logs/unified-feed');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.events) && data.events.length > 0) {
+          unifiedFeedEvents = data.events;
+          renderUnifiedFeed();
+        } else {
+          el.innerHTML = '<span class="text-muted">No recent activity.</span>';
+        }
+      } catch (e) {
+        el.innerHTML = '<span class="text-danger">Error loading live feed.</span>';
+      }
+    }
+    function renderUnifiedFeed() {
+      const el = document.getElementById('unified-live-feed');
+      if (!el) return;
+      let events = unifiedFeedEvents;
+      const type = document.getElementById('feedTypeFilter').value;
+      const search = document.getElementById('feedSearch').value.toLowerCase();
+      if (type !== 'all') events = events.filter(ev => ev.type === type);
+      if (search) events = events.filter(ev => (ev.message||'').toLowerCase().includes(search) || (ev.summary||'').toLowerCase().includes(search));
+      if (!events.length) {
+        el.innerHTML = '<span class="text-muted">No matching activity.</span>';
+        return;
+      }
+      el.innerHTML = events.map(ev => `<div style='margin-bottom:6px' title='${ev.type.charAt(0).toUpperCase()+ev.type.slice(1)} event'><b>${ev.time||''}</b> <span style='font-size:0.95em;color:#888'>[${ev.type}]</span> — <span title='${ev.summary||''}'>${ev.message}</span></div>`).join('');
+    }
+    setInterval(refreshUnifiedFeed, 10000);
+    refreshUnifiedFeed();
+  </script>
+      <!-- Current Status Panel -->
+      <div class="card card-glow" style="margin-bottom:24px">
+        <h3>🔎 JeebsAI Current Status</h3>
+        <div id="jeebs-status-panel" style="font-size:1.08em;line-height:1.5;padding:8px 0">
+          <span class="text-muted">Loading current status...</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="refreshJeebsStatus()">Refresh</button>
+      </div>
+      <script>
+        async function refreshJeebsStatus() {
+          const el = document.getElementById('jeebs-status-panel');
+          if (!el) return;
+          el.innerHTML = '<span class="text-muted">Loading...</span>';
+          try {
+            const res = await fetch('/api/brain/current-status');
+            const data = await res.json();
+            if (data.success && data.status) {
+              el.innerHTML = `<b>Now:</b> ${data.status.now}<br><b>Next:</b> ${data.status.next}<br><b>Summary:</b> <span title='${data.status.detail||''}'>${data.status.summary}</span>`;
+            } else {
+              el.innerHTML = '<span class="text-muted">No current status available.</span>';
+            }
+          } catch (e) {
+            el.innerHTML = '<span class="text-danger">Error loading status.</span>';
+          }
+        }
+        setInterval(refreshJeebsStatus, 10000);
+        refreshJeebsStatus();
+      </script>
   <script>
     JeebsNav.init("evolution");
 
@@ -542,6 +626,7 @@
   </script>
   </main>
   </div>
+  <script src="/webui/js/evolution.js"></script>
 </body>
 
 </html>

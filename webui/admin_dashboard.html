@@ -126,6 +126,7 @@
       <a href="/webui/admin_anomalies.html" class="link-tile"><span class="link-tile-label">Anomalies</span></a>
       <a href="/webui/admin_reasoning.html" class="link-tile"><span class="link-tile-label">Reasoning</span></a>
       <a href="/webui/visualize.html" class="link-tile"><span class="link-tile-label">Brain Graph</span></a>
+      <a id="codegen-link" href="/webui/codegen.html" class="link-tile" style="display:none"><span class="link-tile-label">Code Generation</span></a>
     </div>
   </div>
 
@@ -138,6 +139,13 @@
 <script src="/webui/auth.js"></script>
 <script src="/webui/nav.js"></script>
 <script>
+// Show codegen link only for admins
+requireAuth().then(auth => {
+  if (auth && auth.loggedIn && auth.is_admin) {
+    const cg = document.getElementById('codegen-link');
+    if (cg) cg.style.display = '';
+  }
+});
 // Toggle switch style
 const style = document.createElement('style');
 style.innerHTML = `

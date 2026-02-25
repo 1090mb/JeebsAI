@@ -103,6 +103,12 @@
                                 -
                             </div>
                         </div>
+                        <div class="card">
+                            <h3>Active Listening Cue</h3>
+                            <div id="listening-cue" class="sentiment-value" style="font-size: 1.1rem; color: var(--info);">
+                                -
+                            </div>
+                        </div>
                     </div>
 
                     <div class="refresh-notice">
@@ -137,6 +143,29 @@
 
                     document.getElementById('angle').textContent = t.suggested_angle || '-';
                     document.getElementById('curiosity').textContent = t.curiosity_target || "None";
+
+                    // Show a user-friendly active listening cue based on the angle
+                    let cue = '-';
+                    switch ((t.suggested_angle || '').toLowerCase()) {
+                        case 'empathetic':
+                            cue = "I'm here for you and understand how you feel.";
+                            break;
+                        case 'clarifying':
+                            cue = "Let me make sure I understand. Could you clarify or share more?";
+                            break;
+                        case 'curious':
+                            cue = "That's interesting! Tell me more if you'd like.";
+                            break;
+                        case 'collaborative':
+                            cue = "Thank you for your input. Let's work together!";
+                            break;
+                        case 'friendly':
+                            cue = "Hi! I'm glad to chat with you.";
+                            break;
+                        default:
+                            cue = '-';
+                    }
+                    document.getElementById('listening-cue').textContent = cue;
                 }
             } catch (e) {
                 console.error("Failed to fetch thought:", e);

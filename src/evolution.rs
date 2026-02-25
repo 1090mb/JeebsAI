@@ -1,3 +1,167 @@
+/// Periodically generates and stores a new 'thought' for the default session for live monitoring
+pub fn spawn_background_thought_generator(db: sqlx::SqlitePool) {
+    use std::time::Duration;
+    tokio::spawn(async move {
+        loop {
+            // Generate a random prompt or use a default one
+            let prompt = "What are you thinking about right now?";
+            let user_id = "session:default";
+            if let Ok(thought) = crate::language_learning::ponder(&db, prompt).await {
+                let thought_key = format!("chat:thought:{}", user_id);
+                if let Ok(json) = serde_json::to_string(&thought) {
+                    let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+                        .bind(&thought_key)
+                        .bind(json.as_bytes())
+                        .execute(&db)
+                        .await;
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        }
+    });
+}
+use rand::seq::SliceRandom;
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UnifiedFeedEvent {
+    pub time: String,
+    pub type_: String,
+    pub message: String,
+    pub summary: String,
+}
+
+#[get("/api/logs/unified-feed")]
+pub async fn get_unified_feed_log(_req: HttpRequest, _data: web::Data<AppState>) -> impl Responder {
+    // Pull from real system logs (buffer + db)
+    use crate::logging::get_log_buffer;
+    let mut events = Vec::new();
+    if let Ok(buf) = get_log_buffer().lock() {
+        for line in buf.iter().rev().take(50) {
+            // Example: 2026-02-25T12:34:56+00:00 [EVOLUTION] INFO: Learned about X from Y
+            let (time, rest) = if let Some((t, r)) = line.split_once(' ') {
+                (t, r)
+            } else {
+                ("", line.as_str())
+            };
+            let (category, rest) = if let Some((cat, r)) = rest.split_once(']') {
+                (cat.trim_start_matches('['), r.trim_start_matches(':').trim())
+            } else {
+                ("", rest)
+            };
+            let (level, message) = if let Some((lvl, msg)) = rest.split_once(':') {
+                (lvl.trim(), msg.trim())
+            } else {
+                ("", rest)
+            };
+            // Type detection
+            let type_ = if category.eq_ignore_ascii_case("EVOLUTION") && message.contains("Learned about") {
+                "learning"
+            } else if category.eq_ignore_ascii_case("EVOLUTION") && message.contains("propos") {
+                "proposing"
+            } else if category.eq_ignore_ascii_case("THINKING") || message.contains("Contemplated") || message.contains("Reflected") {
+                "thinking"
+            } else if message.contains("Searched Google") || message.contains("web search") {
+                "search"
+            } else if category.eq_ignore_ascii_case("CHAT") {
+                "chat"
+            } else if level.eq_ignore_ascii_case("ERROR") || level.eq_ignore_ascii_case("WARN") {
+                "error"
+            } else if category.eq_ignore_ascii_case("ADMIN") {
+                "admin"
+            } else {
+                "other"
+            };
+            // Link extraction for learning/search events
+            let msg_html = if type_ == "learning" || type_ == "search" {
+                if let Some((t, u)) = message.split_once(" from ") {
+                    format!("<b>{}</b> <a href='{}' target='_blank' style='color:#222;text-decoration:underline;'>(source)</a>", t.trim(), u.trim())
+                } else {
+                    message.to_string()
+                }
+            } else {
+                message.to_string()
+            };
+            // Actionable summary
+            let summary = match type_ {
+                "learning" => format!("Learned: {}", message.split_once(" from ").map(|(t, _)| t).unwrap_or(message)),
+                "proposing" => format!("Proposal: {}", message),
+                "thinking" => format!("Thought: {}", message),
+                "search" => format!("Web search: {}", message),
+                "chat" => format!("Chat: {}", message),
+                "error" => format!("Error: {}", message),
+                "admin" => format!("Admin: {}", message),
+                _ => message.to_string(),
+            };
+            events.push(UnifiedFeedEvent {
+                time: time.to_string(),
+                type_: type_.to_string(),
+                message: msg_html,
+                summary,
+            });
+        }
+    }
+    // Sort by time descending (most recent first)
+    events.sort_by(|a, b| b.time.cmp(&a.time));
+    HttpResponse::Ok().json(serde_json::json!({ "success": true, "events": events }))
+}
+#[get("/api/brain/current-status")]
+pub async fn get_current_status(_req: HttpRequest, _data: web::Data<AppState>) -> impl Responder {
+    // For demo: generate a unique, human-friendly status summary
+    let now_activities = [
+        "Learning about distributed systems",
+        "Thinking about user intent",
+        "Searching for new knowledge",
+        "Proposing a new experiment",
+        "Reflecting on recent conversations",
+        "Idle, awaiting new instructions",
+    ];
+    let next_activities = [
+        "Explore advanced Rust patterns",
+        "Summarize new facts learned",
+        "Queue a knowledge proposal",
+        "Analyze chat sentiment",
+        "Crawl new web sources",
+        "Pause for system maintenance",
+    ];
+    let mut rng = rand::thread_rng();
+    let now = now_activities.choose(&mut rng).unwrap_or(&"Idle");
+    let next = next_activities.choose(&mut rng).unwrap_or(&"Idle");
+    let summary = format!("JeebsAI is currently: {}. Next: {}.", now, next);
+    let detail = format!("Current activity: {}. Next planned: {}.", now, next);
+    HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "status": {
+            "now": *now,
+            "next": *next,
+            "summary": summary,
+            "detail": detail,
+        }
+    }))
+}
+use actix_web::HttpRequest;
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AutonomousLearningEvent {
+    pub time: String,
+    pub message: String,
+}
+
+/// Returns recent autonomous learning events for the live feed UI
+#[get("/api/logs/autonomous-learning")]
+pub async fn get_autonomous_learning_log(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
+    // For demo: read last 30 lines from a log file, or from a DB table if implemented
+    let log_path = std::env::var("JEEBS_AUTONOMOUS_LOG").unwrap_or_else(|_| "logs/autonomous_learning.log".to_string());
+    let mut events = Vec::new();
+    if let Ok(content) = std::fs::read_to_string(&log_path) {
+        for line in content.lines().rev().take(30) {
+            // Expected format: [2026-02-25 12:34:56] message
+            if let Some((time, message)) = line.split_once("] ") {
+                let time = time.trim_start_matches('[').to_string();
+                events.push(AutonomousLearningEvent { time, message: message.to_string() });
+            }
+        }
+    }
+    events.reverse();
+    HttpResponse::Ok().json(serde_json::json!({ "success": true, "events": events }))
+}
 use crate::state::AppState;
 use crate::utils::{decode_all, encode_all};
 use actix_session::Session;
@@ -1687,6 +1851,11 @@ pub fn spawn_autonomous_thinker(db: SqlitePool) {
                         if let Ok(docs) = crate::cortex::query_wikipedia_docs(&client, &current_topic, 2).await {
                             for doc in docs {
                                 if visited_urls.insert(doc.url.clone()) {
+                                    // Log autonomous learning event
+                                    let log_path = std::env::var("JEEBS_AUTONOMOUS_LOG").unwrap_or_else(|_| "logs/autonomous_learning.log".to_string());
+                                    let _ = std::fs::create_dir_all("logs");
+                                    let log_line = format!("[{}] Learned about {} from {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), doc.title, doc.url);
+                                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&log_path).and_then(|mut f| writeln!(f, "{}", log_line));
                                     let _ = crate::cortex::store_external_learning_doc(&db, &doc).await;
                                     let links: Vec<String> = doc.summary.split_whitespace()
                                         .filter(|w| w.starts_with("http"))

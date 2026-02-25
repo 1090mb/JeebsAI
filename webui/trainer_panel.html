@@ -124,11 +124,22 @@
         </div>
         <div id="proposalsList" class="scroll-box" style="max-height:400px">Loading proposals...</div>
       </div>
+      <div style="margin-top:16px">
+        <h4 class="text-muted" style="margin-bottom:6px">🧩 Latest Thought Process</h4>
+        <div id="latest-thought" class="log-box" style="max-height:120px;overflow-y:auto;">Loading...</div>
+        <button class="btn btn-ghost btn-sm" onclick="refreshLatestThought()">Refresh</button>
+      </div>
+      <div style="margin-top:16px">
+        <h4 class="text-muted" style="margin-bottom:6px">📝 Recent Facts Used in Chat</h4>
+        <div id="recent-facts" class="log-box" style="max-height:120px;overflow-y:auto;">Loading...</div>
+        <button class="btn btn-ghost btn-sm" onclick="refreshRecentFacts()">Refresh</button>
+      </div>
     </div>
   </div>
 
   <script src="/webui/auth.js"></script>
   <script src="/webui/nav.js"></script>
+  <script src="/webui/js/thought_poller.js"></script>
   <script>
     JeebsNav.init('trainer');
 
@@ -159,6 +170,47 @@
       lastSeenSource = "";
       lastSeenFact = "";
     };
+
+    // --- Introspection: Latest Thought Process ---
+    async function refreshLatestThought() {
+      const userId = window.JEEBS_USER_ID || 'session:admin';
+      const el = document.getElementById('latest-thought');
+      if (!el) return;
+      el.textContent = 'Loading...';
+      try {
+        const res = await fetch(`/api/brain/thought/${encodeURIComponent(userId)}`);
+        const data = await res.json();
+        if (data.success && data.thought) {
+          el.textContent = data.thought.internal_monologue || JSON.stringify(data.thought, null, 2);
+        } else {
+          el.textContent = 'No active thought process.';
+        }
+      } catch (e) {
+        el.textContent = 'Error loading thought.';
+      }
+    }
+    window.refreshLatestThought = refreshLatestThought;
+    refreshLatestThought();
+
+    // --- Introspection: Recent Facts Used in Chat ---
+    async function refreshRecentFacts() {
+      const el = document.getElementById('recent-facts');
+      if (!el) return;
+      el.textContent = 'Loading...';
+      try {
+        const res = await fetch('/api/learning/statistics');
+        const data = await res.json();
+        if (data.success && data.statistics && data.statistics.recent_facts) {
+          el.innerHTML = data.statistics.recent_facts.slice(0,5).map(f => `<div style='margin-bottom:4px'><b>${f.title||f.fact||'(untitled)'}</b><br><span class='text-muted' style='font-size:0.9em'>${f.source||''}</span></div>`).join('');
+        } else {
+          el.textContent = 'No recent facts.';
+        }
+      } catch (e) {
+        el.textContent = 'Error loading facts.';
+      }
+    }
+    window.refreshRecentFacts = refreshRecentFacts;
+    refreshRecentFacts();
 
     function addToLiveFeed(type, data) {
       if (isFeedPaused) return;

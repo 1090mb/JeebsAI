@@ -171,6 +171,8 @@ async fn main() -> std::io::Result<()> {
 
     // Start Jeebs autonomous evolution loop
     evolution::spawn_autonomous_thinker(state.db.clone());
+    // Start background thought generator for live thoughts page
+    evolution::spawn_background_thought_generator(state.db.clone());
 
     // Sync training state with persisted toggle and always run worker
     let _ = cortex::sync_training_state_with_toggle(&state.db, training_enabled, "startup").await;

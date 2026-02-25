@@ -1,4 +1,97 @@
+#[get("/api/code/capabilities")]
+pub async fn get_code_capabilities_endpoint(state: web::Data<AppState>) -> impl Responder {
+    let db = &state.db;
+    let langs = crate::language_learning::get_code_capabilities(db).await;
+    HttpResponse::Ok().json(json!({ "success": true, "languages": langs }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CodeGenRequest {
+    pub language: String,
+    pub prompt: String,
+}
+
+#[post("/api/code/generate")]
+pub async fn generate_code_endpoint(
+    state: web::Data<AppState>,
+    req: web::Json<CodeGenRequest>,
+) -> impl Responder {
+    let db = &state.db;
+    let langs = crate::language_learning::get_code_capabilities(db).await;
+    if !langs.iter().any(|l| l.eq_ignore_ascii_case(&req.language)) {
+        return HttpResponse::BadRequest().json(json!({ "success": false, "error": "Language not supported or not learned yet." }));
+    }
+    // Local stub: do not use external AI
+    let code = format!("// {} code for: {}\n// (Local code generation only; no external AI)", req.language, req.prompt);
+    // Get admin username from session or fallback
+    let username = "admin"; // TODO: Replace with real session extraction if available
+
+    // Generate code using local logic
+    let code = generate_local_code(&req.language, &req.prompt);
+
+    // Store codegen history in jeebs_store (key: codegenhist:<username>:<timestamp>)
+    let hist_key = format!("codegenhist:{}:{}", username, chrono::Utc::now().timestamp_millis());
+    let hist_val = serde_json::json!({
+        "language": req.language,
+        "prompt": req.prompt,
+        "code": code,
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    });
+    let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+        .bind(&hist_key)
+        .bind(hist_val.to_string())
+        .execute(db)
+        .await;
+
+    HttpResponse::Ok().json(json!({ "success": true, "language": req.language, "code": code }))
+}
+
+/// Custom local codegen logic for supported languages
+fn generate_local_code(language: &str, prompt: &str) -> String {
+    let lang = language.to_lowercase();
+    let prompt = prompt.trim();
+    match lang.as_str() {
+        "python" => format!("def main():\n    print(\"Hello from JeebsAI!\")\n# Prompt: {}\n", prompt),
+        "rust" => format!("fn main() {{\n    println!(\"Hello from JeebsAI!\");\n}}\n// Prompt: {}\n", prompt),
+        "javascript" => format!("function main() {{\n    console.log('Hello from JeebsAI!');\n}}\n// Prompt: {}\n", prompt),
+        "typescript" => format!("function main(): void {{\n    console.log('Hello from JeebsAI!');\n}}\n// Prompt: {}\n", prompt),
+        "go" => format!("package main\nimport \"fmt\"\nfunc main() {{\n    fmt.Println(\"Hello from JeebsAI!\")\n}}\n// Prompt: {}\n", prompt),
+        "java" => format!("public class Main {{\n    public static void main(String[] args) {{\n        System.out.println(\"Hello from JeebsAI!\");\n    }}\n}}\n// Prompt: {}\n", prompt),
+        "c++" => format!("#include <iostream>\nint main() {{\n    std::cout << \"Hello from JeebsAI!\\n\";\n    return 0;\n}}\n// Prompt: {}\n", prompt),
+        "c#" => format!("using System;\nclass Program {{\n    static void Main() {{\n        Console.WriteLine(\"Hello from JeebsAI!\");\n    }}\n}}\n// Prompt: {}\n", prompt),
+        "ruby" => format!("puts 'Hello from JeebsAI!'\n# Prompt: {}\n", prompt),
+        "php" => format!("<?php\necho 'Hello from JeebsAI!';\n// Prompt: {}\n", prompt),
+        "swift" => format!("print(\"Hello from JeebsAI!\")\n// Prompt: {}\n", prompt),
+        _ => format!("// {} code for: {}\n// (Custom local codegen only)", language, prompt),
+    }
+}
+}
 use actix_web::{get, post, web, HttpResponse, Responder};
+use serde::Deserialize;
+#[get("/api/code/history")]
+pub async fn get_codegen_history_endpoint(state: web::Data<AppState>, query: web::Query<CodeGenHistoryQuery>) -> impl Responder {
+    let db = &state.db;
+    let username = query.username.as_deref().unwrap_or("admin"); // TODO: Replace with real session extraction
+    let pattern = format!("codegenhist:{}:%", username);
+    let rows = sqlx::query("SELECT key, value FROM jeebs_store WHERE key LIKE ? ORDER BY key DESC LIMIT 50")
+        .bind(&pattern)
+        .fetch_all(db)
+        .await
+        .unwrap_or_default();
+    let mut history = Vec::new();
+    for row in rows {
+        let value: String = row.get(1);
+        if let Ok(event) = serde_json::from_str::<serde_json::Value>(&value) {
+            history.push(event);
+        }
+    }
+    HttpResponse::Ok().json(json!({ "success": true, "history": history }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CodeGenHistoryQuery {
+    pub username: Option<String>,
+}
 // use crate::state::AppState;
 // BrainNode and KnowledgeTriple available via crate::brain when needed
 #[get("/api/brain/logic_graph")]
@@ -43,6 +136,7 @@ use std::env;
 use std::time::Instant;
 
 use crate::state::AppState;
+use crate::web_search;
 use crate::utils::decode_all;
 
 /// Result of Cortex thinking for a user prompt
@@ -2966,8 +3060,18 @@ impl Cortex {
         // Learn from conversation passively
         let _ = crate::language_learning::learn_from_input(db, prompt).await;
 
+        // Augment response with empathy, clarification, or active listening cues
+        let augmented_response = match thought.suggested_angle.as_str() {
+            "empathetic" => format!("I understand this might be frustrating. {}", response),
+            "clarifying" => format!("Just to clarify, could you tell me more? {}", response),
+            "curious" => format!("That's interesting! {}", response),
+            "collaborative" => format!("Thank you for your input. {}", response),
+            "friendly" => format!("Hi there! {}", response),
+            _ => response,
+        };
+
         ThinkingResult {
-            response,
+            response: augmented_response,
             thought: Some(thought),
         }
     }
@@ -3071,15 +3175,35 @@ impl Cortex {
         }
 
         if parts.is_empty() {
-            // No knowledge found — provide a helpful fallback
+            // No knowledge found — try web search if enabled
+            let enable_web_search = std::env::var("JEEBS_WEB_SEARCH").unwrap_or_else(|_| "true".to_string()) == "true";
+            if enable_web_search {
+                let api_key = std::env::var("GOOGLE_API_KEY").unwrap_or_default();
+                let cx = std::env::var("GOOGLE_CSE_ID").unwrap_or_default();
+                if !api_key.is_empty() && !cx.is_empty() {
+                    match web_search::google_search(prompt, &api_key, &cx).await {
+                        Ok(results) if !results.is_empty() => {
+                            let top = &results[0];
+                            // Optionally: store as a learned fact
+                            let _ = crate::language_learning::learn_from_input(db, &top.snippet).await;
+                            return format!(
+                                "I searched the web and found:\n**{}**\n{}\n[{}]({})",
+                                top.title, top.snippet, top.link, top.link
+                            );
+                        }
+                        _ => {
+                            return "I tried searching the web but couldn't find a good answer.".to_string();
+                        }
+                    }
+                }
+            }
+            // Fallback if web search is disabled or fails
             let topic_hint = prompt
                 .split_whitespace()
                 .filter(|w| w.len() > 3)
                 .take(3)
                 .collect::<Vec<_>>()
                 .join(" ");
-
-            // Adapt tone based on communication profile
             match profile.style.as_str() {
                 "frustrated" => format!(
                     "I don't have specific information on that yet, but I'm actively learning. \
