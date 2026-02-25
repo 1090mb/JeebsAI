@@ -3,17 +3,25 @@
 # Push to Main Branch and Deploy
 # Run this script on your LOCAL machine to push changes and deploy to VPS
 #
+#!/bin/bash
 set -e
 
 echo "🚀 JeebsAI - Push to Main and Deploy"
 echo "====================================="
 echo ""
+# Configuration
+VPS_HOST="192.227.193.148"
+VPS_USER="root"
+SSH_KEY="/Users/shoup/.ssh/jeebs_vps"
+APP_DIR="/root/JeebsAI"
+DISCORD_WEBHOOK_URL="" # Optional: Paste your Discord Webhook URL here
 
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
+echo "🚀 Starting Deployment to $VPS_HOST..."
 
 info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -30,7 +38,7 @@ warn() {
 # Configuration (edit these as needed)
 VPS_HOST="${VPS_HOST:-192.227.193.148}"
 VPS_USER="${VPS_USER:-root}"
-VPS_APP_DIR="${VPS_APP_DIR:-/root/jeebs}"
+VPS_APP_DIR="${VPS_APP_DIR:-/root/JeebsAI}"
 
 # Step 1: Check git status
 info "Checking git status..."
@@ -61,9 +69,34 @@ echo ""
 
 # Step 4: Push to main
 info "Pushing to main branch..."
+# 1. Git Push
+echo "📦 Pushing to GitHub..."
+git add .
+# Commit if there are changes, otherwise skip
+git commit -m "Update: Deployment $(date +'%Y-%m-%d %H:%M')" || echo "Nothing to commit, pushing existing commits..."
 git push origin main
 
 success "✅ Code pushed to main branch!"
+# 2. Remote Deploy
+echo "📡 Connecting to VPS..."
+ssh -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
+    set -e
+    echo "📂 Navigating to $APP_DIR..."
+    cd "$APP_DIR"
+    
+    echo "⬇️  Pulling latest code..."
+    git fetch origin
+    git reset --hard origin/main
+    
+    echo "🔨 Building release (this may take a moment)..."
+    cargo build --release
+    
+    echo "🔄 Restarting JeebsAI service..."
+    systemctl restart jeebs
+    
+    echo "✅ Service Status:"
+    systemctl status jeebs --no-pager | grep "Active:"
+EOF
 
 echo ""
 echo "=========================================="
@@ -102,3 +135,12 @@ success "=========================================="
 success "🎉 All Done!"
 success "=========================================="
 echo ""
+echo "🎉 Deployment Complete!"
+
+# Post-deployment notification
+if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+    info "🔔 Sending Discord notification..."
+    curl -s -H "Content-Type: application/json" \
+         -d "{\"content\": \"🚀 **JeebsAI Deployment Complete!**\n\n✅ Target: $VPS_HOST\n🕒 Time: $(date)\"}" \
+         "$DISCORD_WEBHOOK_URL" > /dev/null
+fi
