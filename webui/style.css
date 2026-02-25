@@ -4,29 +4,29 @@
 
 /* ── CSS Reset & Variables ────────────────────────────────── */
 :root {
-    --bg-0: #050505;
-    --bg-1: #0A0A0A;
-    --bg-2: #121212;
-    --bg-3: #1A1A1A;
-    --panel: rgba(255, 255, 255, 0.03);
-    --panel-2: rgba(255, 255, 255, 0.05);
-    --panel-hover: rgba(255, 255, 255, 0.08);
-    --text: #EDEDED;
-    --text-secondary: #A1A1AA;
-    --muted: #52525B;
-    --accent: #3B82F6;
-    --accent-glow: rgba(59, 130, 246, 0.25);
-    --accent-2: #8B5CF6;
-    --accent-2-glow: rgba(139, 92, 246, 0.2);
-    --good: #10B981;
-    --good-glow: rgba(16, 185, 129, 0.2);
-    --bad: #EF4444;
-    --bad-glow: rgba(239, 68, 68, 0.2);
-    --warning: #F59E0B;
-    --border: rgba(255, 255, 255, 0.1);
-    --border-strong: rgba(255, 255, 255, 0.15);
-    --line: rgba(255, 255, 255, 0.06);
-    --shadow: rgba(0, 0, 0, 0.5);
+    --bg-0: #f8f9fa;
+    --bg-1: #ffffff;
+    --bg-2: #f1f3f4;
+    --bg-3: #e5e7eb;
+    --panel: #f4f4f4;
+    --panel-2: #ededed;
+    --panel-hover: #e5e7eb;
+    --text: #232323;
+    --text-secondary: #555;
+    --muted: #888;
+    --accent: #222;
+    --accent-glow: rgba(34,34,34,0.08);
+    --accent-2: #555;
+    --accent-2-glow: rgba(85,85,85,0.08);
+    --good: #198754;
+    --good-glow: rgba(25,135,84,0.08);
+    --bad: #dc3545;
+    --bad-glow: rgba(220,53,69,0.08);
+    --warning: #ffc107;
+    --border: #e0e0e0;
+    --border-strong: #bdbdbd;
+    --line: #e0e0e0;
+    --shadow: rgba(0,0,0,0.04);
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
@@ -69,10 +69,7 @@ body::before {
     left: 0;
     right: 0;
     bottom: 0;
-    background:
-        radial-gradient(ellipse at 15% 10%, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
-        radial-gradient(ellipse at 85% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 40%),
-        radial-gradient(ellipse at 50% 90%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
+    background: none;
     pointer-events: none;
     z-index: 0;
 }

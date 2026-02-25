@@ -43,6 +43,7 @@ use std::env;
 use std::time::Instant;
 
 use crate::state::AppState;
+use crate::web_search;
 use crate::utils::decode_all;
 
 /// Result of Cortex thinking for a user prompt
@@ -3071,15 +3072,35 @@ impl Cortex {
         }
 
         if parts.is_empty() {
-            // No knowledge found — provide a helpful fallback
+            // No knowledge found — try web search if enabled
+            let enable_web_search = std::env::var("JEEBS_WEB_SEARCH").unwrap_or_else(|_| "true".to_string()) == "true";
+            if enable_web_search {
+                let api_key = std::env::var("GOOGLE_API_KEY").unwrap_or_default();
+                let cx = std::env::var("GOOGLE_CSE_ID").unwrap_or_default();
+                if !api_key.is_empty() && !cx.is_empty() {
+                    match web_search::google_search(prompt, &api_key, &cx).await {
+                        Ok(results) if !results.is_empty() => {
+                            let top = &results[0];
+                            // Optionally: store as a learned fact
+                            let _ = crate::language_learning::learn_from_input(db, &top.snippet).await;
+                            return format!(
+                                "I searched the web and found:\n**{}**\n{}\n[{}]({})",
+                                top.title, top.snippet, top.link, top.link
+                            );
+                        }
+                        _ => {
+                            return "I tried searching the web but couldn't find a good answer.".to_string();
+                        }
+                    }
+                }
+            }
+            // Fallback if web search is disabled or fails
             let topic_hint = prompt
                 .split_whitespace()
                 .filter(|w| w.len() > 3)
                 .take(3)
                 .collect::<Vec<_>>()
                 .join(" ");
-
-            // Adapt tone based on communication profile
             match profile.style.as_str() {
                 "frustrated" => format!(
                     "I don't have specific information on that yet, but I'm actively learning. \
