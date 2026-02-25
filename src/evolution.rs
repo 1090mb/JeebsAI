@@ -1,3 +1,25 @@
+/// Periodically generates and stores a new 'thought' for the default session for live monitoring
+pub fn spawn_background_thought_generator(db: sqlx::SqlitePool) {
+    use std::time::Duration;
+    tokio::spawn(async move {
+        loop {
+            // Generate a random prompt or use a default one
+            let prompt = "What are you thinking about right now?";
+            let user_id = "session:default";
+            if let Ok(thought) = crate::language_learning::ponder(&db, prompt).await {
+                let thought_key = format!("chat:thought:{}", user_id);
+                if let Ok(json) = serde_json::to_string(&thought) {
+                    let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+                        .bind(&thought_key)
+                        .bind(json.as_bytes())
+                        .execute(&db)
+                        .await;
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        }
+    });
+}
 use rand::seq::SliceRandom;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UnifiedFeedEvent {

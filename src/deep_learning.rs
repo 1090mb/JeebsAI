@@ -366,27 +366,7 @@ pub async fn start_full_internet_research_session(
 
         // Process up to 1 + follow_links pages per iteration
         for page_url in pages_to_process.clone().into_iter().take(1 + follow_links) {
-            // Basic robots.txt check: skip domain if robots disallows '/'
-            if let Ok(parsed) = reqwest::Url::parse(&page_url) {
-                if let Some(host) = parsed.host_str() {
-                    let robots_url = format!("{}://{}/robots.txt", parsed.scheme(), host);
-                    if let Ok(resp) = client.get(&robots_url).send().await {
-                        if let Ok(txt) = resp.text().await {
-                            for line in txt.lines() {
-                                let l = line.trim();
-                                if l.starts_with("Disallow:") {
-                                    let path = l[9..].trim();
-                                    if path == "/" {
-                                        // skip this domain entirely
-                                        let _ = crate::logging::log(&db, "WARN", "research", &format!("Skipping domain {} due to robots.txt", host)).await;
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // robots.txt check removed: always crawl all domains
 
             // Fetch the page
             if let Ok(resp) = client.get(&page_url).timeout(Duration::from_secs(15)).send().await {

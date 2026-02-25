@@ -1,3 +1,16 @@
+/// Retrieve all programming languages JeebsAI can generate code for
+pub async fn get_code_capabilities(db: &SqlitePool) -> Vec<String> {
+    let rows = sqlx::query("SELECT key FROM jeebs_store WHERE key LIKE 'codecap:%'")
+        .fetch_all(db)
+        .await
+        .unwrap_or_default();
+    rows.into_iter()
+        .filter_map(|row| {
+            let key: String = row.get(0);
+            key.strip_prefix("codecap:").map(|s| s.to_string())
+        })
+        .collect()
+}
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
@@ -73,6 +86,21 @@ pub async fn learn_from_input(db: &SqlitePool, input: &str) -> Result<(), String
     // Detect and learn patterns
     let pattern_category = categorize_input(input);
     learn_pattern(db, input, &pattern_category).await?;
+
+    // Detect programming language knowledge and store as code capability
+    let programming_languages = [
+        "python", "rust", "javascript", "typescript", "java", "c++", "c#", "go", "ruby", "php", "swift", "kotlin", "scala", "perl", "haskell", "lua", "matlab", "r", "dart", "elixir", "clojure"
+    ];
+    for lang in &programming_languages {
+        if input.to_lowercase().contains(lang) {
+            let key = format!("codecap:{}", lang);
+            let _ = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+                .bind(&key)
+                .bind(&Local::now().to_rfc3339())
+                .execute(db)
+                .await;
+        }
+    }
 
     Ok(())
 }
@@ -461,8 +489,13 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
     let mut word_count = 0;
     let mut new_concepts = Vec::new();
     let mut curiosity_target = None;
+    let mut contains_question = false;
+    let mut contains_gratitude = false;
+    let mut contains_frustration = false;
+    let mut contains_confusion = false;
+    let mut contains_greeting = false;
 
-    // 1. Analyze Sentiment & Novelty
+    // 1. Analyze Sentiment, Novelty, and Cues
     for word in &words {
         let key = format!("{}{}", VOCABULARY_KEY_PREFIX, word);
         if let Ok(Some(row)) = sqlx::query("SELECT value FROM jeebs_store WHERE key = ?")
@@ -484,6 +517,31 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
                 }
             }
         }
+
+        // Empathy/clarification cues
+        let lw = word.to_lowercase();
+        if lw == "thanks" || lw == "thank" || lw == "appreciate" {
+            contains_gratitude = true;
+        }
+        if lw == "confused" || lw == "unclear" || lw == "lost" {
+            contains_confusion = true;
+        }
+        if lw == "hello" || lw == "hi" || lw == "hey" {
+            contains_greeting = true;
+        }
+        if lw == "frustrated" || lw == "annoyed" || lw == "angry" || lw == "upset" {
+            contains_frustration = true;
+        }
+    }
+
+    if input.contains('?') {
+        contains_question = true;
+    }
+    if input.to_lowercase().contains("thank you") {
+        contains_gratitude = true;
+    }
+    if input.to_lowercase().contains("not sure") || input.to_lowercase().contains("don't understand") {
+        contains_confusion = true;
     }
 
     let avg_sentiment = if word_count > 0 {
@@ -492,21 +550,31 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
         0.0
     };
 
-    // 2. Determine Angle
-    let angle = if avg_sentiment > 0.5 {
-        "celebratory"
-    } else if avg_sentiment < -0.5 {
+    // 2. Determine Angle (expanded)
+    let angle = if contains_frustration || avg_sentiment < -0.5 {
         "empathetic"
-    } else if curiosity_target.is_some() {
+    } else if contains_confusion {
+        "clarifying"
+    } else if contains_question || curiosity_target.is_some() {
         "curious"
-    } else if input.contains('?') {
-        "helpful"
+    } else if contains_gratitude || avg_sentiment > 0.5 {
+        "collaborative"
+    } else if contains_greeting {
+        "friendly"
     } else {
         "conversational"
     };
 
-    // 3. Formulate Internal Monologue
-    let monologue = if !new_concepts.is_empty() {
+    // 3. Formulate Internal Monologue (richer, context-aware)
+    let monologue = if contains_frustration {
+        "User may be frustrated. Respond with empathy and offer help.".to_string()
+    } else if contains_confusion {
+        "User seems confused. Offer clarification or ask a follow-up question.".to_string()
+    } else if contains_gratitude {
+        "User expressed gratitude. Acknowledge and reciprocate politely.".to_string()
+    } else if contains_greeting {
+        "User greeted me. Respond warmly and invite conversation.".to_string()
+    } else if !new_concepts.is_empty() {
         format!(
             "User mentioned new concepts: {:?}. I should learn more about {}. Sentiment seems {}.",
             new_concepts,
@@ -518,13 +586,14 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
             "User is expressing strong emotion ({:.2}). I should respond with a {} tone.",
             avg_sentiment, angle
         )
+    } else if contains_question {
+        "User asked a question. Respond helpfully and check if clarification is needed.".to_string()
     } else {
         "Input is standard. I will process this logically and check my knowledge base.".to_string()
     };
 
-    // 4. Update Cognitive State (Simple implementation: just log it for now)
-    // In a full implementation, we would store this state to persist "mood" across messages.
-    
+    // 4. Update Cognitive State (future: persist mood/context)
+
     Ok(Thought {
         internal_monologue: monologue,
         detected_sentiment: avg_sentiment,
