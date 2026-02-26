@@ -1,14 +1,6 @@
-#!/usr/bin/env bash
-#
-# Push to Main Branch and Deploy
-# Run this script on your LOCAL machine to push changes and deploy to VPS
-#
 #!/bin/bash
 set -e
 
-echo "🚀 JeebsAI - Push to Main and Deploy"
-echo "====================================="
-echo ""
 # Configuration
 VPS_HOST="192.227.193.148"
 VPS_USER="root"
@@ -19,76 +11,39 @@ DISCORD_WEBHOOK_URL="" # Optional: Paste your Discord Webhook URL here
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
 NC='\033[0m'
-echo "🚀 Starting Deployment to $VPS_HOST..."
 
-info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+echo -e "${BLUE}🚀 JeebsAI - Push and Deploy${NC}"
+echo "Target: $VPS_USER@$VPS_HOST:$APP_DIR"
 
-success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-# Configuration (edit these as needed)
-VPS_HOST="${VPS_HOST:-192.227.193.148}"
-VPS_USER="${VPS_USER:-root}"
-VPS_APP_DIR="${VPS_APP_DIR:-/root/JeebsAI}"
-
-# Step 1: Check git status
-info "Checking git status..."
-git status
-
-echo ""
-read -p "Do you want to commit all changes? (y/n) " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    # Step 2: Add all changes
-    info "Adding all changes..."
-    git add .
-
-    # Step 3: Commit
-    read -p "Enter commit message: " commit_message
-    if [ -z "$commit_message" ]; then
-        commit_message="Deploy updates - $(date '+%Y-%m-%d %H:%M:%S')"
-    fi
-
-    info "Committing changes..."
-    git commit -m "$commit_message" || warn "No changes to commit or commit failed"
-else
-    warn "Skipping commit. Proceeding with existing commits..."
-fi
-
-echo ""
-
-# Step 4: Push to main
-info "Pushing to main branch..."
 # 1. Git Push
-echo "📦 Pushing to GitHub..."
+echo -e "${BLUE}📦 Pushing to GitHub...${NC}"
 git add .
-# Commit if there are changes, otherwise skip
-git commit -m "Update: Deployment $(date +'%Y-%m-%d %H:%M')" || echo "Nothing to commit, pushing existing commits..."
+git commit -m "Update: Deployment $(date +'%Y-%m-%d %H:%M')" || echo "Nothing to commit"
 git push origin main
 
-success "✅ Code pushed to main branch!"
 # 2. Remote Deploy
-echo "📡 Connecting to VPS..."
+echo -e "${BLUE}📡 Connecting to VPS...${NC}"
 ssh -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
     set -e
     echo "📂 Navigating to $APP_DIR..."
+    
+    # Ensure directory exists
+    mkdir -p "$APP_DIR"
     cd "$APP_DIR"
     
+    # Check if it's a git repo, if not clone it (or init and pull if empty)
+    if [ ! -d ".git" ]; then
+        echo "⬇️  Cloning repository..."
+        # Assuming public or auth configured on VPS
+        git clone https://github.com/Deployed-Labs/JeebsAI.git . || echo "Clone failed, trying to pull if dir not empty"
+    fi
+
     echo "⬇️  Pulling latest code..."
     git fetch origin
     git reset --hard origin/main
     
-    echo "🔨 Building release (this may take a moment)..."
+    echo "🔨 Building release..."
     cargo build --release
     
     echo "🔄 Restarting JeebsAI service..."
@@ -98,48 +53,11 @@ ssh -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
     systemctl status jeebs --no-pager | grep "Active:"
 EOF
 
-echo ""
-echo "=========================================="
-echo ""
-
-# Step 5: Ask about VPS deployment
-read -p "Do you want to deploy to VPS now? (y/n) " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo ""
-    info "Deploying to VPS: $VPS_USER@$VPS_HOST"
-
-    # Upload deployment script
-    info "Uploading deployment script..."
-    scp deploy_to_vps.sh "$VPS_USER@$VPS_HOST:/tmp/deploy_jeebs.sh"
-
-    # Execute deployment on VPS
-    info "Executing deployment on VPS..."
-    ssh -t "$VPS_USER@$VPS_HOST" "chmod +x /tmp/deploy_jeebs.sh && sudo /tmp/deploy_jeebs.sh"
-
-    success "✅ Deployment complete!"
-else
-    echo ""
-    warn "Skipping VPS deployment."
-    echo ""
-    info "To deploy later, run on your VPS:"
-    echo "  cd $VPS_APP_DIR"
-    echo "  sudo ./deploy_to_vps.sh"
-    echo ""
-    info "Or run this script again and choose 'y' for deployment."
-fi
-
-echo ""
-success "=========================================="
-success "🎉 All Done!"
-success "=========================================="
-echo ""
-echo "🎉 Deployment Complete!"
+echo -e "${GREEN}🎉 Deployment Complete!${NC}"
 
 # Post-deployment notification
 if [ -n "$DISCORD_WEBHOOK_URL" ]; then
-    info "🔔 Sending Discord notification..."
+    echo -e "${BLUE}🔔 Sending Discord notification...${NC}"
     curl -s -H "Content-Type: application/json" \
          -d "{\"content\": \"🚀 **JeebsAI Deployment Complete!**\n\n✅ Target: $VPS_HOST\n🕒 Time: $(date)\"}" \
          "$DISCORD_WEBHOOK_URL" > /dev/null
