@@ -72,6 +72,10 @@ pub struct Thought {
     pub curiosity_target: Option<String>,
     pub suggested_angle: String, // "empathetic", "analytical", "curious", "direct"
     pub new_concepts: Vec<String>,
+    #[serde(default)]
+    pub ambiguity_score: f32,
+    #[serde(default)]
+    pub correction_detected: bool,
 }
 
 /// Learn from user input by analyzing patterns
@@ -494,6 +498,7 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
     let mut contains_frustration = false;
     let mut contains_confusion = false;
     let mut contains_greeting = false;
+    let mut contains_correction = false;
 
     // 1. Analyze Sentiment, Novelty, and Cues
     for word in &words {
@@ -544,6 +549,20 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
         contains_confusion = true;
     }
 
+    // Correction detection
+    let lower_input = input.to_lowercase();
+    if lower_input.starts_with("no,") 
+        || lower_input.contains("that's wrong") 
+        || lower_input.contains("that is wrong")
+        || lower_input.contains("actually") 
+        || lower_input.contains("you are wrong") 
+        || lower_input.contains("incorrect")
+        || lower_input.contains("not correct")
+        || lower_input.contains("mistake")
+    {
+        contains_correction = true;
+    }
+
     let avg_sentiment = if word_count > 0 {
         total_sentiment / word_count as f32
     } else {
@@ -551,7 +570,9 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
     };
 
     // 2. Determine Angle (expanded)
-    let angle = if contains_frustration || avg_sentiment < -0.5 {
+    let angle = if contains_correction {
+        "apologetic"
+    } else if contains_frustration || avg_sentiment < -0.5 {
         "empathetic"
     } else if contains_confusion {
         "clarifying"
@@ -566,7 +587,9 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
     };
 
     // 3. Formulate Internal Monologue (richer, context-aware)
-    let monologue = if contains_frustration {
+    let monologue = if contains_correction {
+        "User is correcting me. I should accept the correction gracefully and update my context.".to_string()
+    } else if contains_frustration {
         "User may be frustrated. Respond with empathy and offer help.".to_string()
     } else if contains_confusion {
         "User seems confused. Offer clarification or ask a follow-up question.".to_string()
@@ -592,6 +615,15 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
         "Input is standard. I will process this logically and check my knowledge base.".to_string()
     };
 
+    // 4. Calculate Ambiguity Score
+    let ambiguity_score = if words.len() < 2 && !contains_greeting && !contains_gratitude {
+        0.9
+    } else if words.len() < 5 && !contains_question && !contains_greeting && !contains_gratitude && new_concepts.is_empty() {
+        0.6
+    } else {
+        0.0
+    };
+
     // 4. Update Cognitive State (future: persist mood/context)
 
     Ok(Thought {
@@ -600,5 +632,7 @@ pub async fn ponder(db: &SqlitePool, input: &str) -> Result<Thought, String> {
         curiosity_target,
         suggested_angle: angle.to_string(),
         new_concepts,
+        ambiguity_score,
+        correction_detected: contains_correction,
     })
 }

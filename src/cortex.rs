@@ -914,6 +914,8 @@ fn extract_learnable_fact(prompt: &str) -> Option<String> {
         "please remember ",
         "for future reference ",
         "fyi ",
+        "note that ",
+        "just so you know ",
     ] {
         if lower.starts_with(prefix) {
             let fact = normalize_fact_text(&clean[prefix.len()..]);
@@ -929,7 +931,10 @@ fn extract_learnable_fact(prompt: &str) -> Option<String> {
             || lower.contains(" was ")
             || lower.contains(" were ")
             || lower.contains(" favorite ")
-            || lower.contains(" favourite ");
+            || lower.contains(" favourite ")
+            || lower.contains(" name ")
+            || lower.contains(" job ")
+            || lower.contains(" hobby ");
         if likely_fact {
             let fact = normalize_fact_text(&clean);
             if !fact.is_empty() {
@@ -948,12 +953,23 @@ fn extract_learnable_fact(prompt: &str) -> Option<String> {
         "i like ",
         "i love ",
         "i prefer ",
+        "i hate ",
+        "i dislike ",
+        "i think ",
+        "i believe ",
     ] {
         if lower.starts_with(prefix) {
             let fact = normalize_fact_text(&clean);
             if !fact.is_empty() {
                 return Some(fact);
             }
+        }
+    }
+
+    if lower.starts_with("actually, ") || lower.starts_with("in fact, ") {
+        let fact = normalize_fact_text(&clean);
+        if !fact.is_empty() {
+            return Some(fact);
         }
     }
 
@@ -2647,6 +2663,8 @@ impl Cortex {
                 curiosity_target: None,
                 suggested_angle: "neutral".to_string(),
                 new_concepts: vec![],
+                ambiguity_score: 0.0,
+                correction_detected: false,
             },
         };
 
@@ -3041,7 +3059,7 @@ impl Cortex {
             }
 
             Intent::Conversation => {
-                Self::conversational_response(db, prompt.trim(), &learned_facts, &history, &profile, &thought)
+                Self::conversational_response(db, prompt.trim(), &learned_facts, &history, &profile, &thought, &owner)
                     .await
             }
         };
@@ -3063,7 +3081,10 @@ impl Cortex {
         let _ = save_communication_profile(db, &owner, &profile).await;
 
         // Learn from conversation passively
-        let _ = crate::language_learning::learn_from_input(db, prompt).await;
+        if let Ok(_) = crate::language_learning::learn_from_input(db, prompt).await {
+            // Log that we learned something to confirm "learning from interactions"
+            let _ = crate::logging::log(db, "INFO", "LEARNING", &format!("Absorbed vocabulary/patterns from user input: '{}'", truncate_chars(prompt, 50))).await;
+        }
 
         // Response is already augmented by the specific handlers using the thought process
         let augmented_response = response;
@@ -3252,12 +3273,12 @@ impl Cortex {
         history: &[ConversationTurn],
         profile: &CommunicationProfile,
         thought: &crate::language_learning::Thought,
+        owner: &str,
     ) -> String {
         // Check for teachable facts
         if let Some(fact) = extract_learnable_fact(prompt) {
             // This was missed by the intent classifier — store it
-            let owner_key = "ephemeral:default";
-            if save_learned_fact(db, owner_key, &fact).await.is_ok() {
+            if save_learned_fact(db, owner, &fact).await.is_ok() {
                 return format!("✅ Noted: *{fact}*. I'll keep that in mind.");
             }
         }
@@ -3268,11 +3289,25 @@ impl Cortex {
             return kb_response;
         }
 
+        // If input is ambiguous and we have no knowledge response, ask for clarification
+        if thought.ambiguity_score > 0.5 && kb_response.is_empty() {
+             let clarifications = [
+                 format!("Could you elaborate on '{}'?", prompt),
+                 "I'm not sure I follow. Can you explain more?",
+                 "That's a bit brief. What do you mean?",
+                 "I want to understand better. Can you give me more context?",
+                 format!("I'm listening, but I need a bit more detail about '{}'.", prompt),
+             ];
+             let idx = (chrono::Local::now().timestamp() as usize) % clarifications.len();
+             return clarifications[idx].clone();
+        }
+
         // Context-aware conversational response
         let mut response_parts = Vec::new();
 
         // 1. Acknowledge based on sentiment/angle
         let intro = match thought.suggested_angle.as_str() {
+            "apologetic" => "I stand corrected. Thanks for pointing that out.",
             "empathetic" => "I understand where you're coming from.",
             "clarifying" => "Let me make sure I'm following.",
             "curious" => "That's an interesting perspective!",
@@ -3285,24 +3320,48 @@ impl Cortex {
         }
 
         // 2. Main body based on profile style and content
-        let body = match profile.style.as_str() {
-            "frustrated" => "I hear you. Let me know if there's something specific I can help with to make this smoother.",
-            "curious" => "Want me to look into that further? I can research related topics if you'd like.",
-            "direct" => "Got it. What would you like me to do with that information?",
-            "reflective" => "That's a thoughtful point. It connects with some of the things we've discussed.",
-            _ => "I see! Is there something specific you'd like me to help with or look up?",
+        let body = if thought.correction_detected {
+            let _ = save_learned_fact(db, owner, prompt).await;
+            "I've updated my internal context with this correction. Thanks for setting me straight.".to_string()
+        } else if let Some(target) = &thought.curiosity_target {
+             format!("I'm actually quite curious about *{}*. Could you tell me more about it?", target)
+        } else {
+            match profile.style.as_str() {
+                "frustrated" => "I hear you. Let me know if there's something specific I can help with to make this smoother.".to_string(),
+                "curious" => "Want me to look into that further? I can research related topics if you'd like.".to_string(),
+                "direct" => "Got it. What would you like me to do with that information?".to_string(),
+                "reflective" => "That's a thoughtful point. It connects with some of the things we've discussed.".to_string(),
+                _ => {
+                    // Standard basic communication options to keep engagement high while training
+                    let options = [
+                        "I see! Is there something specific you'd like me to help with or look up?",
+                        "Interesting. Tell me more about that so I can learn.",
+                        "I'm listening. How does that fit into what we were discussing?",
+                        "Got it. I'm adding that to my context. What else?",
+                        "I'm still training on this type of conversation. Can you elaborate?",
+                        "That's good to know. I'm constantly updating my internal models.",
+                        "I appreciate the input. It helps me understand your communication style better.",
+                        "Noted. Is this related to a specific topic you want me to research?",
+                    ];
+                    options[prompt.len() % options.len()].to_string()
+                },
+            }
         };
         response_parts.push(body.to_string());
 
         // 3. Add engagement hook (follow-up)
-        if !thought.new_concepts.is_empty() {
-            let concept = &thought.new_concepts[0];
-            response_parts.push(format!("By the way, this reminds me of *{}* — should we explore that?", concept));
-        } else if !history.is_empty() {
-             let topics = infer_recent_topics(history, 2);
-             if !topics.is_empty() {
-                 response_parts.push(format!("It seems related to our chat about *{}*.", topics[0]));
-             }
+        if !body.contains('?') {
+            if !thought.new_concepts.is_empty() {
+                let concept = &thought.new_concepts[0];
+                if Some(concept) != thought.curiosity_target.as_ref() {
+                    response_parts.push(format!("By the way, this reminds me of *{}* — should we explore that?", concept));
+                }
+            } else if !history.is_empty() {
+                 let topics = infer_recent_topics(history, 2);
+                 if !topics.is_empty() {
+                     response_parts.push(format!("It seems related to our chat about *{}*.", topics[0]));
+                 }
+            }
         }
 
         response_parts.join(" ")
