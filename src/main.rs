@@ -116,8 +116,15 @@ async fn main() -> std::io::Result<()> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(300)).await; // Save every 5 minutes
-            if let Ok(guard) = chdsc_for_save.read() {
-                if let Err(e) = guard.save(&db_for_save).await {
+            
+            let snapshot = if let Ok(guard) = chdsc_for_save.read() {
+                serde_json::to_vec(&*guard).ok()
+            } else {
+                None
+            };
+
+            if let Some(json) = snapshot {
+                if let Err(e) = sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)").bind("chdsc_state").bind(json).execute(&db_for_save).await {
                     eprintln!("Failed to save CHDSC state: {}", e);
                 }
             }
