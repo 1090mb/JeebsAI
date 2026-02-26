@@ -23,7 +23,7 @@ pub async fn generate_code_endpoint(
         return HttpResponse::BadRequest().json(json!({ "success": false, "error": "Language not supported or not learned yet." }));
     }
     // Local stub: do not use external AI
-    let code = format!("// {} code for: {}\n// (Local code generation only; no external AI)", req.language, req.prompt);
+    let _ = format!("// {} code for: {}\n// (Local code generation only; no external AI)", req.language, req.prompt);
     // Get admin username from session or fallback
     let username = "admin"; // TODO: Replace with real session extraction if available
 
@@ -3293,9 +3293,9 @@ impl Cortex {
         if thought.ambiguity_score > 0.5 && kb_response.is_empty() {
              let clarifications = [
                  format!("Could you elaborate on '{}'?", prompt),
-                 "I'm not sure I follow. Can you explain more?",
-                 "That's a bit brief. What do you mean?",
-                 "I want to understand better. Can you give me more context?",
+                 "I'm not sure I follow. Can you explain more?".to_string(),
+                 "That's a bit brief. What do you mean?".to_string(),
+                 "I want to understand better. Can you give me more context?".to_string(),
                  format!("I'm listening, but I need a bit more detail about '{}'.", prompt),
              ];
              let idx = (chrono::Local::now().timestamp() as usize) % clarifications.len();

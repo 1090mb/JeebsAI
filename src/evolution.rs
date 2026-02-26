@@ -147,7 +147,7 @@ pub struct AutonomousLearningEvent {
 
 /// Returns recent autonomous learning events for the live feed UI
 #[get("/api/logs/autonomous-learning")]
-pub async fn get_autonomous_learning_log(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
+pub async fn get_autonomous_learning_log(_req: HttpRequest, _data: web::Data<AppState>) -> impl Responder {
     // For demo: read last 30 lines from a log file, or from a DB table if implemented
     let log_path = std::env::var("JEEBS_AUTONOMOUS_LOG").unwrap_or_else(|_| "logs/autonomous_learning.log".to_string());
     let mut events = Vec::new();

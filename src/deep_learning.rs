@@ -403,9 +403,9 @@ pub async fn start_full_internet_research_session(
                             let mut abs_links: Vec<String> = Vec::new();
                             for l in links {
                                 if let Ok(u) = reqwest::Url::parse(&l) {
-                                    abs_links.push(u.into_string());
+                                    abs_links.push(u.to_string());
                                 } else if let Some(b) = &base {
-                                    if let Ok(u2) = b.join(&l) { abs_links.push(u2.into_string()); }
+                                    if let Ok(u2) = b.join(&l) { abs_links.push(u2.to_string()); }
                                 }
                                 if abs_links.len() >= follow_links { break; }
                             }

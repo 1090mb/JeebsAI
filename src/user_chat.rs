@@ -8,7 +8,6 @@ use std::env;
 
 use crate::logging;
 use crate::chat_history;
-use crate::filter_knowledge;
 use crate::state::AppState;
 
 const DEFAULT_JWT_SECRET: &str = "jeebs-secret-key-change-in-production";
