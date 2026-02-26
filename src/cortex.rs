@@ -1907,6 +1907,7 @@ pub fn random_crawl_candidates() -> Vec<&'static str> {
         "https://www.kaggle.com",
         "https://www.paperswithcode.com",
         // Economics & Finance
+        "https://codeforces.com",
         "https://www.imf.org",
         "https://www.worldbank.org",
         "https://www.ecb.europa.eu",

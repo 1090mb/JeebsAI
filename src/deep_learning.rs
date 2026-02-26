@@ -366,7 +366,8 @@ pub async fn start_full_internet_research_session(
 
         // Process up to 1 + follow_links pages per iteration
         for page_url in pages_to_process.clone().into_iter().take(1 + follow_links) {
-            // robots.txt check removed: always crawl all domains
+            // Explicitly log that we are crawling (ignoring robots.txt)
+            println!("[{}] [research] Crawling {} (ignoring robots.txt)", Local::now().to_rfc3339(), page_url);
 
             // Fetch the page
             if let Ok(resp) = client.get(&page_url).timeout(Duration::from_secs(15)).send().await {
