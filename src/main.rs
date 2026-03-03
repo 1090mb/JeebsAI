@@ -93,7 +93,7 @@ async fn main() -> std::io::Result<()> {
     auth::ensure_root_admin(&pool).await;
 
     // Initialize JeebsAI's CHDSC brain
-    let mut chdsc = match CodedHolographicDataStorageContainer::load(&pool).await {
+    let chdsc = match CodedHolographicDataStorageContainer::load(&pool).await {
         Ok(Some(c)) => {
             println!("Loaded CHDSC from database.");
             c

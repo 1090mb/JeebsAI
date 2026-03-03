@@ -1,7 +1,5 @@
 use actix_web::{post, web, HttpRequest, HttpResponse, Responder};
-use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
-use crate::chat_history;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedbackRequest {

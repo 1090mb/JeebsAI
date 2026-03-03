@@ -658,7 +658,7 @@
     // Training mode functions
     window.setTrainingMode = async function(enabled) {
       try {
-        const res = await fetch('/api/admin/training/set-mode', {
+        const res = await fetch('/api/admin/training/mode', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ enabled })
@@ -676,7 +676,7 @@
     window.runTrainingNow = async function() {
       try {
         const minutes = parseInt(document.getElementById('full-training-minutes').value) || 15;
-        const res = await fetch('/api/admin/training/run-full', {
+        const res = await fetch('/api/admin/training/run/full', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ duration_minutes: minutes, with_internet: true })
@@ -695,7 +695,7 @@
       try {
         const minutes = parseInt(document.getElementById('extended-minutes').value) || 10;
         const inference = document.getElementById('extended-inference').checked;
-        const res = await fetch('/api/brain/extended-run', {
+        const res = await fetch('/api/learning/run-extended', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ duration_minutes: minutes, enable_inference: inference })
