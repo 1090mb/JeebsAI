@@ -47,6 +47,42 @@ pub async fn smart_chat(
 
     let session_id = session.get::<String>("session_id").ok().flatten();
 
+    // EARLY EXIT: Detect and handle simple greetings immediately
+    if is_simple_greeting(message) {
+        let greeting_response = handle_greeting(message);
+
+        // Still record messages in history even for greetings
+        let _ = chat_history::insert_chat_message(
+            &data.db,
+            session_id.as_deref(),
+            Some(&username),
+            "user",
+            message,
+        )
+        .await;
+
+        let _ = chat_history::insert_chat_message(
+            &data.db,
+            session_id.as_deref(),
+            None,
+            "jeebs",
+            &greeting_response,
+        )
+        .await;
+
+        return HttpResponse::Ok().json(json!({
+            "response": greeting_response,
+            "summary": "Greeting",
+            "confidence": 1.0,
+            "follow_up": None::<String>,
+            "understanding": {
+                "intent": "greeting",
+                "topic": "general",
+                "context_messages": 0
+            }
+        }));
+    }
+
     // Step 1: Load conversation context
     let mut context = match conversation_context::load_conversation_context(
         &data.db,
@@ -63,6 +99,13 @@ pub async fn smart_chat(
             }));
         }
     };
+
+    println!(
+        "[SmartChat] Loaded context: {} messages, topic: {}, session: {}",
+        context.messages.len(),
+        context.current_topic,
+        context.session_id
+    );
 
     // Step 2: Analyze user message
     let user_intent = conversation_context::analyze_user_message(message);
@@ -96,6 +139,15 @@ pub async fn smart_chat(
                     // Step 6: Generate smart response
                     let response_config =
                         smart_response::get_response_config_for_intent(&user_intent.primary);
+
+                    // Reduce response length if we have conversation history (user already knows context)
+                    let mut response_config = response_config;
+                    if context.messages.len() > 4 {
+                        // Ongoing conversation - make responses shorter
+                        response_config.max_length = (response_config.max_length as f32 * 0.7) as usize;
+                        response_config.max_facts = (response_config.max_facts as f32 * 0.8) as usize;
+                    }
+
                     let smart_response = smart_response::generate_smart_response(
                         facts,
                         inference_context.confidence,
@@ -143,7 +195,8 @@ pub async fn smart_chat(
                         "understanding": {
                             "intent": user_intent.primary,
                             "topic": context.current_topic,
-                            "context_messages": context.messages.len()
+                            "context_messages": context.messages.len(),
+                            "from_history": context.messages.len() > 0
                         },
                         "learning": {
                             "consolidated": true,
@@ -207,3 +260,55 @@ fn extract_username(session: &Session) -> Option<String> {
         .ok()
         .flatten()
 }
+
+/// Detect if message is a simple greeting
+fn is_simple_greeting(message: &str) -> bool {
+    let lower_msg = message.to_lowercase();
+    let lower = lower_msg.trim();
+    let common_greetings = [
+        "hello", "hi", "hey", "greetings", "howdy",
+        "what's up", "whats up", "yo", "sup",
+        "good morning", "good afternoon", "good evening",
+        "morning", "afternoon", "evening",
+        "how are you", "how're you", "how are you doing",
+        "how do you do", "pleased to meet you"
+    ];
+
+    for greeting in &common_greetings {
+        if lower == *greeting || lower.starts_with(&format!("{} ", greeting)) || lower.ends_with(&format!(" {}", greeting)) {
+            return true;
+        }
+    }
+
+    // Also detect very short messages that look like greetings
+    lower.len() <= 10 && (
+        lower.ends_with("?") && !lower.contains(" ")
+        || lower == "hello?" || lower == "hi?" || lower == "hey?"
+    )
+}
+
+/// Generate appropriate greeting response
+fn handle_greeting(message: &str) -> String {
+    let lower_msg = message.to_lowercase();
+    let lower = lower_msg.trim();
+
+    // Generate contextual greetings
+    let response = if lower.contains("morning") {
+        "Good morning! What would you like to talk about today?"
+    } else if lower.contains("afternoon") {
+        "Good afternoon! How can I help you?"
+    } else if lower.contains("evening") {
+        "Good evening! What's on your mind?"
+    } else if lower.contains("how are") || lower.contains("how're") {
+        "I'm here and ready to help! What would you like to know?"
+    } else if lower.contains("up") {
+        "Not much! What would you like to talk about?"
+    } else if lower.contains("hey") {
+        "Hey there! What can I help you with?"
+    } else {
+        "Hello! I'm ready to learn and help. What's your question?"
+    };
+
+    response.to_string()
+}
+
