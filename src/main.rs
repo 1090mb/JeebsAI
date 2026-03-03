@@ -12,7 +12,7 @@ use jeebs::plugins::{
     TranslatePlugin, WeatherPlugin, WebsiteStatusPlugin,
 };
 use jeebs::{
-    admin, auth, brain_parsing_api, chat, chat_feedback, cortex, evolution, logging, user_chat, mcp_api, enhanced_chat, AppState,
+    admin, auth, brain_parsing_api, chat, chat_feedback, cortex, evolution, logging, user_chat, mcp_api, enhanced_chat, cdhsc_proposals, AppState,
 };
 use jeebs::brain::coded_holographic_data_storage_container::CodedHolographicDataStorageContainer;
 use sqlx::{Row, SqlitePool};
@@ -359,6 +359,11 @@ async fn main() -> std::io::Result<()> {
             .service(brain_parsing_api::get_graph_statistics)
             .service(brain_parsing_api::analyze_relationships)
             .service(brain_parsing_api::get_entities_report)
+            .service(cdhsc_proposals::create_proposal)
+            .service(cdhsc_proposals::list_proposals)
+            .service(cdhsc_proposals::vote_proposal)
+            .service(cdhsc_proposals::approve_proposal)
+            .service(cdhsc_proposals::deny_proposal)
             .service(cortex::logic_graph_endpoint)
             .service(cortex::get_unified_feed)
             .service(cortex::get_brain_status)
