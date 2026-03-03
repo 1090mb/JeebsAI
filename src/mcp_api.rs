@@ -1,7 +1,7 @@
-/// MCP API Endpoints
+/// JeebsAI Internal Protocol API Endpoints
 ///
-/// Exposes the MCP (Model Context Protocol) server functionality as REST endpoints
-/// allowing Claude and external services to query JeebsAI's brain
+/// Exposes JeebsAI's internal server functionality as REST endpoints
+/// for JeebsAI's own intelligent systems to query the brain
 
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};

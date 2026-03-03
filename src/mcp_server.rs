@@ -1,16 +1,18 @@
-/// Model Context Protocol (MCP) Server for JeebsAI
+/// JeebsAI Internal Protocol Server
 ///
-/// Provides Claude and other LLMs with structured access to:
+/// Provides JeebsAI's own intelligent systems with structured access to:
 /// - Brain knowledge bases (facts, concepts, relationships)
 /// - Learning session data
 /// - Inference capabilities
 /// - Memory management
 ///
-/// This allows Claude to:
+/// This allows JeebsAI to:
 /// - Query the holographic brain for relevant context
 /// - Make informed decisions based on learned knowledge
 /// - Perform transparent reasoning with access to sources
 /// - Track and learn from interactions
+///
+/// Completely custom, proprietary JeebsAI technology - no external AI integration
 
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
