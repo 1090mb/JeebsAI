@@ -11,6 +11,7 @@ pub mod cortex;
 pub mod intelligent_inference;
 pub mod mcp_server;
 pub mod mcp_api;
+pub mod continuous_learning;
 pub mod data_synthesis;
 pub mod deep_learning;
 pub mod evolution;
