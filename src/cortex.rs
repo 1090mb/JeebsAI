@@ -347,3 +347,18 @@ pub async fn store_external_learning_doc(db: &SqlitePool, doc: &ExternalDoc) -> 
 pub async fn set_training_focus_for_trainer(_db: &SqlitePool, _topic: &str, _user: &str) -> Result<(), String> {
     Ok(())
 }
+
+pub async fn sync_training_state_with_toggle(
+    db: &SqlitePool,
+    enabled: bool,
+    source: &str
+) -> Result<(), sqlx::Error> {
+    let value = if enabled { "true" } else { "false" };
+    sqlx::query("INSERT OR REPLACE INTO jeebs_store (key, value) VALUES (?, ?)")
+        .bind("training_enabled")
+        .bind(value)
+        .execute(db)
+        .await?;
+    println!("Training state synced: {} (Source: {})", enabled, source);
+    Ok(())
+}
