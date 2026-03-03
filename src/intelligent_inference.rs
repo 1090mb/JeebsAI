@@ -10,6 +10,7 @@
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use std::collections::HashSet;
+use crate::brain::coded_holographic_data_storage_container::CodedHolographicDataStorageContainer;
 
 #[derive(Debug, Clone)]
 pub struct InferenceContext {
@@ -74,6 +75,7 @@ pub struct InferenceResult {
 
 /// Build rich inference context from user query
 pub async fn build_context(
+    chdsc: &CodedHolographicDataStorageContainer,
     pool: &SqlitePool,
     query: &str,
     user_id: Option<&str>,
@@ -83,11 +85,11 @@ pub async fn build_context(
     // Extract key concepts from query
     let key_concepts = extract_concepts(query);
 
-    // Retrieve relevant facts from brain
-    let facts = retrieve_relevant_facts(pool, &key_concepts, 10).await?;
+    // Retrieve relevant facts from brain via CDHSC
+    let facts = retrieve_relevant_facts(chdsc, &key_concepts, 10).await?;
 
-    // Build knowledge graph from connections
-    let knowledge_graph = build_knowledge_graph(pool, &key_concepts).await?;
+    // Build knowledge graph from CDHSC connections
+    let knowledge_graph = build_knowledge_graph(chdsc, &key_concepts).await?;
 
     // Find relevant learning sessions
     let learning_sessions = find_relevant_sessions(pool, &key_concepts).await?;
@@ -117,7 +119,7 @@ fn extract_concepts(query: &str) -> Vec<String> {
 
 /// Retrieve facts relevant to concepts with scoring
 async fn retrieve_relevant_facts(
-    pool: &SqlitePool,
+    chdsc: &CodedHolographicDataStorageContainer,
     concepts: &[String],
     limit: usize,
 ) -> Result<Vec<FactWithScore>, String> {
@@ -127,54 +129,33 @@ async fn retrieve_relevant_facts(
 
     let mut all_facts: Vec<FactWithScore> = Vec::new();
 
-    // Query brain_nodes_v2 for matching facts
+    // Query CDHSC for matching facts using search_by_concept
     for concept in concepts.iter().take(5) {
-        let pattern = format!("%{}%", concept);
+        // Search CDHSC by concept - searches tags and metadata
+        let matching_nodes = chdsc.search_by_concept(concept);
 
-        let rows = sqlx::query_as::<_, (String, String, String)>(
-            "SELECT id, fact, category FROM brain_nodes_v2
-             WHERE fact LIKE ? OR category LIKE ?
-             LIMIT 20",
-        )
-        .bind(&pattern)
-        .bind(&pattern)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        for node in matching_nodes.iter().take(20) {
+            let relevance = calculate_relevance(&node.id, concept);
 
-        for (id, fact, category) in rows {
+            // Extract fact from metadata or use node ID
+            let fact_text = node.meta
+                .get("fact")
+                .cloned()
+                .unwrap_or_else(|| node.id.clone());
+
             all_facts.push(FactWithScore {
-                fact,
-                source: category,
-                relevance_score: calculate_relevance(&id, concept),
-                importance: 0.7,
-                usage_count: 0,
-                related_concepts: vec![concept.clone()],
-            });
-        }
-    }
-
-    // Query knowledge_triples for structured knowledge
-    for concept in concepts.iter().take(3) {
-        let rows = sqlx::query_as::<_, (String, String, String, f64)>(
-            "SELECT subject, predicate, object, confidence FROM knowledge_triples
-             WHERE subject LIKE ? OR object LIKE ?
-             LIMIT 15",
-        )
-        .bind(format!("%{}%", concept))
-        .bind(format!("%{}%", concept))
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
-
-        for (subject, predicate, object, conf) in rows {
-            all_facts.push(FactWithScore {
-                fact: format!("{} {} {}", subject, predicate, object),
-                source: "knowledge_triple".to_string(),
-                relevance_score: conf as f32,
-                importance: conf as f32,
-                usage_count: 0,
-                related_concepts: vec![concept.clone()],
+                fact: fact_text,
+                source: node.meta.get("source").cloned().unwrap_or_else(|| "holographic".to_string()),
+                relevance_score: relevance,
+                importance: node.meta
+                    .get("importance")
+                    .and_then(|s| s.parse::<f32>().ok())
+                    .unwrap_or(0.7),
+                usage_count: node.meta
+                    .get("usage_count")
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .unwrap_or(0),
+                related_concepts: node.tags.clone(),
             });
         }
     }
@@ -187,14 +168,14 @@ async fn retrieve_relevant_facts(
     });
 
     let top_facts: Vec<FactWithScore> = all_facts.into_iter().take(limit).collect();
-    println!("[Inference] Retrieved {} relevant facts", top_facts.len());
+    println!("[Inference] Retrieved {} relevant facts from CDHSC", top_facts.len());
 
     Ok(top_facts)
 }
 
 /// Build knowledge graph from concept connections
 async fn build_knowledge_graph(
-    pool: &SqlitePool,
+    chdsc: &CodedHolographicDataStorageContainer,
     concepts: &[String],
 ) -> Result<KnowledgeGraph, String> {
     let mut nodes = Vec::new();
@@ -211,45 +192,28 @@ async fn build_knowledge_graph(
         });
     }
 
-    // Query connections between concepts
+    // Query CDHSC connections for concept relationships
     for concept in concepts.iter().take(3) {
-        let rows = sqlx::query_as::<_, (String, String, f64)>(
-            "SELECT from_node, to_node, strength FROM connections
-             WHERE from_node LIKE ? OR to_node LIKE ?
-             LIMIT 30",
-        )
-        .bind(format!("%{}%", concept))
-        .bind(format!("%{}%", concept))
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        let connections = chdsc.find_connections_for(concept);
 
-        for (from, to, strength) in rows {
-            let edge_key = format!("{}-{}", from, to);
+        for (relation, target, strength) in connections.iter().take(30) {
+            let edge_key = format!("{}-{}", concept, target);
             if !seen_edges.contains(&edge_key) {
                 edges.push(GraphEdge {
-                    from: from.clone(),
-                    to: to.clone(),
-                    relation: "connected".to_string(),
-                    strength: strength as f32,
+                    from: concept.clone(),
+                    to: target.clone(),
+                    relation: relation.clone(),
+                    strength: *strength,
                 });
                 seen_edges.insert(edge_key);
 
                 // Ensure both nodes exist
-                if !nodes.iter().any(|n| n.id == from) {
+                if !nodes.iter().any(|n| n.id == *target) {
                     nodes.push(GraphNode {
-                        id: from.clone(),
-                        label: from.clone(),
+                        id: target.clone(),
+                        label: target.clone(),
                         node_type: "node".to_string(),
-                        weight: strength as f32,
-                    });
-                }
-                if !nodes.iter().any(|n| n.id == to) {
-                    nodes.push(GraphNode {
-                        id: to.clone(),
-                        label: to.clone(),
-                        node_type: "node".to_string(),
-                        weight: strength as f32,
+                        weight: *strength,
                     });
                 }
             }
@@ -257,7 +221,7 @@ async fn build_knowledge_graph(
     }
 
     println!(
-        "[Inference] Built knowledge graph: {} nodes, {} edges",
+        "[Inference] Built knowledge graph from CDHSC: {} nodes, {} edges",
         nodes.len(),
         edges.len()
     );
@@ -507,6 +471,53 @@ pub async fn log_inference_outcome(
     .map_err(|e| e.to_string())?;
 
     println!("[Inference] Logged outcome for continuous learning");
+
+    Ok(())
+}
+
+/// Learn from inference by updating CDHSC with results
+pub async fn log_and_learn_from_inference(
+    pool: &SqlitePool,
+    chdsc: &mut CodedHolographicDataStorageContainer,
+    inference_result: &InferenceResult,
+    user_feedback: Option<bool>,
+) -> Result<(), String> {
+    // 1. Log to jeebs_store (same as before)
+    log_inference_outcome(pool, inference_result, user_feedback.map(|b| if b { "positive" } else { "negative" }).as_deref()).await?;
+
+    // 2. Learn by updating CDHSC
+    if user_feedback == Some(true) {
+        // User found response helpful - boost confidence of used facts
+        for concept in &inference_result.learned_concepts {
+            // Find matching nodes in CDHSC
+            let nodes = chdsc.search_by_concept(concept);
+            // Collect node IDs to avoid borrow conflicts
+            let node_ids: Vec<String> = nodes.iter().map(|n| n.id.clone()).collect();
+
+            for node_id in node_ids {
+                // Update usage count
+                if let Some(node) = chdsc.get_node(&node_id) {
+                    let current_count = node.meta.get("usage_count")
+                        .and_then(|s| s.parse::<i32>().ok())
+                        .unwrap_or(0);
+
+                    chdsc.update_node_metadata(
+                        &node_id,
+                        "usage_count",
+                        (current_count + 1).to_string()
+                    );
+
+                    // Increase importance
+                    chdsc.update_node_metadata(
+                        &node_id,
+                        "importance",
+                        "0.85".to_string()
+                    );
+                }
+            }
+        }
+        println!("[Inference] CDHSC updated with {} learned concepts", inference_result.learned_concepts.len());
+    }
 
     Ok(())
 }

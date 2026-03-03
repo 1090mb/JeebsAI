@@ -546,7 +546,8 @@ pub async fn intelligent_chat(
     }
 
     // Build inference context from brain databases
-    match crate::intelligent_inference::build_context(&data.db, message, Some(&username)).await {
+    let chdsc = data.chdsc.read().unwrap().clone();
+    match crate::intelligent_inference::build_context(&chdsc, &data.db, message, Some(&username)).await {
         Ok(context) => {
             // Perform intelligent inference with reasoning
             match crate::intelligent_inference::infer_response(&context).await {

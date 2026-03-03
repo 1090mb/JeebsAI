@@ -58,6 +58,49 @@ impl CodedHolographicDataStorageContainer {
         self.nodes.values().filter(|n| n.tags.contains(&tag.to_string())).collect()
     }
 
+    /// Search by concept - matches in tags and metadata
+    pub fn search_by_concept(&self, concept: &str) -> Vec<&HoloNode> {
+        let lower_concept = concept.to_lowercase();
+        self.nodes.values().filter(|n| {
+            // Match in tags
+            n.tags.iter().any(|t| t.to_lowercase().contains(&lower_concept)) ||
+            // Match in metadata values
+            n.meta.values().any(|v| v.to_lowercase().contains(&lower_concept))
+        }).collect()
+    }
+
+    /// Find all connections for a given node
+    pub fn find_connections_for(&self, node_id: &str) -> Vec<(String, String, f32)> {
+        let mut connections = Vec::new();
+        for (from, relation, to) in self.links.iter() {
+            if from == node_id {
+                // Default strength 0.5 if not provided in relation
+                let strength = relation
+                    .split(':')
+                    .last()
+                    .and_then(|s| s.parse::<f32>().ok())
+                    .unwrap_or(0.5);
+                connections.push((relation.clone(), to.clone(), strength));
+            }
+        }
+        connections
+    }
+
+    /// Update metadata for an existing node
+    pub fn update_node_metadata(&mut self, node_id: &str, key: &str, value: String) {
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.meta.insert(key.to_string(), value);
+            self.quantum_entropy += 0.002;
+            self.comprehension += 0.005;
+            self.flare();
+        }
+    }
+
+    /// Get a node by ID
+    pub fn get_node(&self, node_id: &str) -> Option<&HoloNode> {
+        self.nodes.get(node_id)
+    }
+
     /// Emergent logic: returns a summary of the mesh
     pub fn emergent_summary(&self) -> String {
         let mood = if self.comprehension > 10.0 {
@@ -135,6 +178,34 @@ pub fn create_holo_node(id: &str, tags: Vec<String>, meta: HashMap<String, Strin
     HoloNode {
         id: id.to_string(),
         hologram: vec![42, 99, 7, 13], // Placeholder quantum encoding
+        tags,
+        meta,
+    }
+}
+
+/// Create a holographic node from a fact
+pub fn create_node_from_fact(id: &str, fact: &str, source: &str) -> HoloNode {
+    // Extract tags from fact (words > 3 chars)
+    let mut tags: Vec<String> = fact
+        .split_whitespace()
+        .filter(|w| w.len() > 3)
+        .map(|w| w.to_lowercase())
+        .collect();
+
+    // Add source as tag
+    tags.push(source.to_lowercase());
+    tags.dedup();
+
+    let mut meta = HashMap::new();
+    meta.insert("fact".to_string(), fact.to_string());
+    meta.insert("source".to_string(), source.to_string());
+    meta.insert("created_at".to_string(), chrono::Local::now().to_rfc3339());
+    meta.insert("usage_count".to_string(), "0".to_string());
+    meta.insert("importance".to_string(), "0.7".to_string());
+
+    HoloNode {
+        id: id.to_string(),
+        hologram: vec![42, 99, 7, 13],
         tags,
         meta,
     }

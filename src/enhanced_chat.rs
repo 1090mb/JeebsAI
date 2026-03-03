@@ -116,8 +116,11 @@ pub async fn smart_chat(
         println!("[SmartChat] Topic shift detected");
     }
 
+    // Get holographic brain for inference
+    let chdsc = data.chdsc.read().unwrap().clone();
+
     // Step 3: Build intelligent inference context
-    match intelligent_inference::build_context(&data.db, message, Some(&username)).await {
+    match intelligent_inference::build_context(&chdsc, &data.db, message, Some(&username)).await {
         Ok(inference_context) => {
             // Step 4: Perform inference
             match intelligent_inference::infer_response(&inference_context).await {
@@ -175,9 +178,11 @@ pub async fn smart_chat(
                     )
                     .await;
 
-                    // Step 8: Log learning outcome for continuous learning
-                    let _ = intelligent_inference::log_inference_outcome(
+                    // Step 8: Log learning outcome and update CDHSC
+                    let mut chdsc = data.chdsc.write().unwrap();
+                    let _ = intelligent_inference::log_and_learn_from_inference(
                         &data.db,
+                        &mut chdsc,
                         &inference_result,
                         None,
                     )
