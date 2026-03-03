@@ -70,8 +70,19 @@ ssh -o ConnectTimeout=30 -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
     fi
 
     echo "⬇️  Updating deployment script..."
-    git fetch origin
-    git reset --hard origin/main
+    # Clean up potential corruption on VPS side
+    find .git -name "._*" -delete 2>/dev/null || true
+
+    # Try to fetch, if fails (e.g. 500 error or corruption), re-clone
+    if ! git fetch origin; then
+        echo "⚠️  Git fetch failed. Re-cloning repository to fix corruption..."
+        cd ..
+        rm -rf "$APP_DIR"
+        git clone https://github.com/Deployed-Labs/JeebsAI.git "$APP_DIR"
+        cd "$APP_DIR"
+    else
+        git reset --hard origin/main
+    fi
     
     echo "🚀 Running full VPS deployment..."
     chmod +x deploy_to_vps.sh

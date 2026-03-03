@@ -84,6 +84,9 @@ pull_code() {
 
     cd "$APP_DIR"
 
+    # Clean up git metadata corruption if present
+    find .git -name "._*" -delete 2>/dev/null || true
+
     # Stash any local changes
     if [ -d .git ]; then
         git stash push -m "Auto-stash before deployment $(date)"
