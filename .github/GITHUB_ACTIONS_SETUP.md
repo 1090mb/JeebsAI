@@ -18,7 +18,7 @@ No additional setup is required for the CI workflow.
 
 The deployment workflow (`deploy.yml`) automates deployment to your VPS. It runs:
 
-- Automatically on every push to the `main` branch
+- Automatically when a new **Release** is published
 - Manually via the GitHub Actions UI (workflow_dispatch)
 
 ### Required GitHub Secrets

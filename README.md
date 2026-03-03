@@ -451,7 +451,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 This project uses GitHub Actions for continuous integration and deployment:
 
 - **CI Pipeline:** Automatically runs tests, linting, and security checks on every push and pull request
-- **Deployment Pipeline:** Automatically deploys to production VPS on merges to the `main` branch
+- **Deployment Pipeline:** Automatically deploys to production VPS when a new **Release** is published
 
 For detailed information on setting up and using the CI/CD pipelines, see [.github/GITHUB_ACTIONS_SETUP.md](.github/GITHUB_ACTIONS_SETUP.md).
 

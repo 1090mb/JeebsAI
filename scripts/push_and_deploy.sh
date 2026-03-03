@@ -9,15 +9,38 @@ VPS_HOST="192.227.193.148"
 VPS_USER="root"
 SSH_KEY="/Users/shoup/.ssh/jeebs_vps"
 APP_DIR="/root/JeebsAI"
-DISCORD_WEBHOOK_URL="" # Optional: Paste your Discord Webhook URL here
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1476367489490358272/k5Kn7xztOWFsXYOSnmwuHCiF3CQ1WXMxvYvzt4KSf_t0zdx36mVNbj7II9y-vwA6oEOd"
 
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m'
+
+# Failure handling
+function notify_failure {
+    local exit_code=$?
+    local line_num=$BASH_LINENO
+    echo -e "${RED}❌ Deployment Failed! (Exit code: $exit_code on line $line_num)${NC}"
+    if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+        echo -e "${RED}🔔 Sending failure notification...${NC}"
+        curl -s -H "Content-Type: application/json" \
+             -d "{\"content\": \"❌ **JeebsAI Deployment FAILED!**\n\n- Target: $VPS_HOST\n- Exit Code: $exit_code at line $line_num\n- Time: $(date)\"}" \
+             "$DISCORD_WEBHOOK_URL" > /dev/null
+    fi
+}
+trap notify_failure ERR
 
 echo -e "${BLUE}🚀 JeebsAI - Push and Deploy${NC}"
 echo "Target: $VPS_USER@$VPS_HOST:$APP_DIR"
+
+# Pre-deployment notification
+if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+    echo -e "${BLUE}🔔 Sending start notification...${NC}"
+    curl -s -H "Content-Type: application/json" \
+         -d "{\"content\": \"⏳ **JeebsAI Deployment Started**\n\n🚀 Target: $VPS_HOST\n🕒 Time: $(date)\"}" \
+         "$DISCORD_WEBHOOK_URL" > /dev/null
+fi
 
 # 1. Git Push
 echo -e "${BLUE}📦 Pushing to GitHub...${NC}"
@@ -27,7 +50,7 @@ git push origin main
 
 # 2. Remote Deploy
 echo -e "${BLUE}📡 Connecting to VPS...${NC}"
-ssh -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
+ssh -o ConnectTimeout=30 -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
     set -e
     echo "📂 Navigating to $APP_DIR..."
     
