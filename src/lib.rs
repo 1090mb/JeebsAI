@@ -27,6 +27,7 @@ pub mod toggle_manager;
 pub mod updater;
 pub mod user_chat;
 pub mod chat_history;
+pub mod chat_feedback;
 pub mod filter_knowledge;
 pub mod utils;
 

@@ -12,7 +12,7 @@ use jeebs::plugins::{
     TranslatePlugin, WeatherPlugin, WebsiteStatusPlugin,
 };
 use jeebs::{
-    admin, auth, brain_parsing_api, chat, cortex, evolution, logging, user_chat, AppState,
+    admin, auth, brain_parsing_api, chat, chat_feedback, cortex, evolution, logging, user_chat, AppState,
 };
 use jeebs::brain::coded_holographic_data_storage_container::CodedHolographicDataStorageContainer;
 use sqlx::{Row, SqlitePool};
@@ -297,6 +297,8 @@ async fn main() -> std::io::Result<()> {
             .service(user_chat::user_chat)
             .service(user_chat::chat_preflight)
             .service(user_chat::chat_status)
+            .service(user_chat::chat_history_endpoint)
+            .service(chat_feedback::submit_feedback)
             // Removed admin/knowledge routes that are no longer implemented in cortex
             .service(admin::status::get_system_status)
             .route("/api/health", web::get().to(admin::status::health_check))

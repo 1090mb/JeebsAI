@@ -167,9 +167,73 @@ pub async fn get_learning_statistics(data: web::Data<AppState>) -> impl Responde
     }
 }
 
-#[get("/api/brain/logic-graph")]
-pub async fn logic_graph_endpoint() -> impl Responder {
-    HttpResponse::Ok().json(json!({"nodes": [], "edges": []}))
+#[get("/api/brain/logic_graph")]
+pub async fn logic_graph_endpoint(data: web::Data<AppState>) -> impl Responder {
+    let pool = &data.db;
+
+    // Fetch learning sessions to build graph nodes
+    let sessions = sqlx::query_as::<_, (String, String, String, i32)>(
+        "SELECT id, topic, depth_level, confidence FROM deep_learning_sessions LIMIT 50"
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+
+    // Create nodes from learning sessions
+    for (id, topic, _depth, confidence) in sessions.iter() {
+        nodes.push(json!({
+            "id": id.clone(),
+            "label": topic.clone(),
+            "title": format!("Topic: {}\nConfidence: {}%", topic, confidence),
+            "color": format!("hsl({}, 100%, 45%)", (*confidence as f32 * 3.6) as i32),
+            "size": 20 + (confidence / 10),
+            "confidence": confidence
+        }));
+    }
+
+    // Fetch brain node connections to build edges
+    if !sessions.is_empty() {
+        let edges_result = sqlx::query_as::<_, (String, String)>(
+            "SELECT from_node, to_node FROM brain_connections LIMIT 100"
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        for (from_id, to_id) in edges_result {
+            edges.push(json!({
+                "from": from_id,
+                "to": to_id,
+                "arrows": "to",
+                "smooth": { "type": "continuous" }
+            }));
+        }
+    }
+
+    // If no real data, create a demo graph structure
+    if nodes.is_empty() {
+        nodes = vec![
+            json!({ "id": "root", "label": "Core Knowledge", "title": "Foundation", "color": "#3b82f6", "size": 30 }),
+            json!({ "id": "logic_1", "label": "Logic Chains", "title": "Boolean Algebra", "color": "#10b981", "size": 25 }),
+            json!({ "id": "logic_2", "label": "Reasoning", "title": "Deductive Logic", "color": "#8b5cf6", "size": 22 }),
+            json!({ "id": "logic_3", "label": "Inference", "title": "Pattern Recognition", "color": "#f59e0b", "size": 20 }),
+        ];
+        edges = vec![
+            json!({ "from": "root", "to": "logic_1", "arrows": "to", "smooth": { "type": "continuous" } }),
+            json!({ "from": "root", "to": "logic_2", "arrows": "to", "smooth": { "type": "continuous" } }),
+            json!({ "from": "logic_1", "to": "logic_3", "arrows": "to", "smooth": { "type": "continuous" } }),
+            json!({ "from": "logic_2", "to": "logic_3", "arrows": "to", "smooth": { "type": "continuous" } }),
+        ];
+    }
+
+    HttpResponse::Ok().json(json!({
+        "nodes": nodes,
+        "edges": edges,
+        "physics_enabled": true
+    }))
 }
 
 #[get("/api/brain/latest-thought")]
