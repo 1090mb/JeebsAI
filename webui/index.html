@@ -675,21 +675,24 @@
                 /* ── Fetch & Update CDHSC Brain Info ───────────────── */
                 async function updateBrainInfo() {
                     try {
-                        const status = await requestJson("/api/jeebs_mood");
-                        if (status && typeof status === 'string') {
-                            const entropyMatch = status.match(/Entropy: ([\d.]+)/);
-                            const comprehensionMatch = status.match(/Comprehension: ([\d.]+)/);
-                            const nodesMatch = status.match(/(\d+) nodes/);
+                        const response = await fetch("/api/jeebs_mood", {
+                            credentials: "same-origin"
+                        });
+                        const text = await response.text();
+                        if (text) {
+                            // Parse format: "HoloMesh: X nodes, Y links, entropy Z.ZZZZ, attitude: ..., mood: ..."
+                            const nodesMatch = text.match(/(\d+)\s+nodes/);
+                            const entropyMatch = text.match(/entropy\s+([\d.]+)/);
 
-                            if (entropyMatch) {
-                                document.getElementById("entropyValue").textContent = parseFloat(entropyMatch[1]).toFixed(2);
-                            }
-                            if (comprehensionMatch) {
-                                document.getElementById("comprehensionValue").textContent = parseFloat(comprehensionMatch[1]).toFixed(2);
-                            }
                             if (nodesMatch) {
                                 document.getElementById("nodeCountValue").textContent = nodesMatch[1];
                             }
+                            if (entropyMatch) {
+                                document.getElementById("entropyValue").textContent = parseFloat(entropyMatch[1]).toFixed(2);
+                            }
+
+                            // Comprehension is calculated internally but show entropy as proxy
+                            document.getElementById("comprehensionValue").textContent = (parseFloat(entropyMatch[1]) || 0).toFixed(1);
                         }
                     } catch (e) {
                         // Brain info unavailable, that's OK
