@@ -301,9 +301,10 @@ pub async fn query_wikipedia_docs(client: &reqwest::Client, topic: &str, limit: 
     let mut docs = Vec::new();
     if let Some(array) = json.as_array() {
         if array.len() >= 4 {
-            let titles = array[1].as_array().unwrap_or(&vec![]);
-            let summaries = array[2].as_array().unwrap_or(&vec![]);
-            let urls = array[3].as_array().unwrap_or(&vec![]);
+            let empty_vec = Vec::new();
+            let titles = array[1].as_array().unwrap_or(&empty_vec);
+            let summaries = array[2].as_array().unwrap_or(&empty_vec);
+            let urls = array[3].as_array().unwrap_or(&empty_vec);
 
             for i in 0..titles.len() {
                 if i < summaries.len() && i < urls.len() {
