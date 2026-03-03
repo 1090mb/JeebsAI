@@ -11,585 +11,779 @@
     rel="stylesheet" />
   <link rel="stylesheet" href="/webui/style.css" />
   <style>
-    @keyframes slide-down {
-      from {
-        opacity: 0;
-        transform: translateY(-10px)
-      }
+    .trainer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
 
-      to {
-        opacity: 1;
-        transform: translateY(0)
+    @media (max-width: 1400px) {
+      .trainer-grid {
+        grid-template-columns: 1fr;
       }
     }
 
-    .feed-item {
+    .activity-feed {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: 600px;
+    }
+
+    .feed-header {
+      padding: 16px;
       border-bottom: 1px solid var(--border);
-      padding: 10px 0
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--panel);
+    }
+
+    .feed-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column-reverse;
+    }
+
+    .feed-item {
+      padding: 12px;
+      margin-bottom: 8px;
+      border-left: 3px solid var(--accent);
+      background: var(--bg-2);
+      border-radius: var(--radius-md);
+      animation: slide-in-left 0.3s ease;
+      font-size: 0.9rem;
+    }
+
+    .feed-item.learning {
+      border-left-color: #10b981;
+    }
+
+    .feed-item.thinking {
+      border-left-color: #8b5cf6;
+    }
+
+    .feed-item.update {
+      border-left-color: #f59e0b;
+    }
+
+    .feed-item.feature {
+      border-left-color: #06b6d4;
+    }
+
+    @keyframes slide-in-left {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .feed-time {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-family: var(--font-mono);
+    }
+
+    .feed-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-right: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-learning {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .badge-thinking {
+      background: rgba(139, 92, 246, 0.2);
+      color: #8b5cf6;
+    }
+
+    .badge-update {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+    }
+
+    .badge-feature {
+      background: rgba(6, 182, 212, 0.2);
+      color: #06b6d4;
+    }
+
+    .feed-content {
+      color: var(--text);
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .feed-meta {
+      margin-top: 6px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #06b6d4);
+      transition: width 0.3s ease;
+    }
+
+    .learning-session-item {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .learning-session-item:hover {
+      background: var(--panel);
+      border-color: var(--accent);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .learning-session-item.active {
+      border-color: var(--accent);
+      background: var(--panel);
+    }
+
+    .session-topic {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .session-meta {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .control-section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .scroll-box {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 30px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state-icon {
+      font-size: 2rem;
+      margin-bottom: 10px;
+      opacity: 0.5;
     }
   </style>
 </head>
 
 <body>
   <div id="app-layout">
-  <aside id="sidebar-container"></aside>
-  <main class="main-content">
-  <div class="shell" style="">
-    <h1 style="margin-bottom:4px">Trainer Panel</h1>
-    <p class="text-muted" style="margin-bottom:24px">Unified, robust JeebsAI training system for trainers and
-      admins.</p>
-    <div id="authStatus" class="card" style="padding:12px;margin-bottom:16px"><span class="text-muted">Checking
-        access...</span></div>
-    <div class="card">
-      <h3>JeebsAI Training System</h3>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
-        <button class="btn btn-accent" onclick="setTrainingMode(true)">Enable Training</button>
-        <button class="btn btn-danger" onclick="setTrainingMode(false)">Disable Training</button>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input id="full-training-minutes" class="form-input" type="number" min="1" value="15" style="width:80px"
-            title="Minutes" />
-          <button id="runFullBtn" class="btn btn-primary" onclick="runTrainingNow()">Run Internet
-            Training</button>
-          <div id="training-feeling" title="Jeebs mood" style="font-size:1.4em;line-height:1;">🙂</div>
+    <aside id="sidebar-container"></aside>
+    <main class="main-content">
+      <div class="shell">
+        <!-- Header -->
+        <div style="margin-bottom: 24px;">
+          <h1 style="margin-bottom: 4px;">🎓 Trainer Panel</h1>
+          <p class="text-muted">Real-time learning and training system for JeebsAI</p>
         </div>
-      </div>
-      <div id="training-status" class="text-muted" style="margin-bottom:8px">Loading training status...</div>
 
-      <div class="card" style="background:var(--bg-1); border:1px solid var(--border); margin-top:12px;">
-        <h4 style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-          <span>🧠 Live Learning Feed</span>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="pauseFeedBtn" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:0.7em"
-              onclick="toggleFeedPause()">Pause</button>
-            <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:0.7em"
-              onclick="clearLiveFeed()">Clear</button>
-            <label
-              style="font-size:0.8em;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none"><input
-                type="checkbox" checked onchange="toggleFeedFilter('source', this.checked)"> Sources</label>
-            <label
-              style="font-size:0.8em;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none"><input
-                type="checkbox" checked onchange="toggleFeedFilter('fact', this.checked)"> Facts</label>
-            <span class="badge badge-accent" style="font-size:0.7em">REAL-TIME</span>
+        <!-- Auth Status -->
+        <div id="authStatus" class="card" style="padding: 12px; margin-bottom: 16px;">
+          <span class="text-muted">Checking access...</span>
+        </div>
+
+        <!-- Training Control -->
+        <div class="control-section">
+          <h3 style="margin-bottom: 12px;">Training Controls</h3>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+            <button class="btn btn-success" onclick="setTrainingMode(true)" style="flex: 1;">
+              ▶ Enable Training
+            </button>
+            <button class="btn btn-danger" onclick="setTrainingMode(false)" style="flex: 1;">
+              ⏹ Disable Training
+            </button>
+            <div style="flex: 1; display: flex; gap: 8px;">
+              <input id="full-training-minutes" class="form-input" type="number" min="1" value="15"
+                style="width: 80px;" placeholder="Minutes" />
+              <button class="btn btn-primary btn-sm" onclick="runTrainingNow()" style="flex: 1;">
+                🌐 Run Training
+              </button>
+            </div>
           </div>
-        </h4>
-        <div id="live-feed" class="scroll-box" style="max-height:300px; overflow-y:auto; padding-right:5px;">
-          <div class="text-muted" style="text-align:center; padding:20px;">Waiting for activity...</div>
+          <div id="training-status" class="text-muted" style="font-size: 0.9rem;">Loading status...</div>
         </div>
-      </div>
 
-      <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
-        <a href="/webui/visualize.html" class="btn btn-ghost">Brain Graph</a>
-        <a href="/webui/admin_reasoning.html" class="btn btn-ghost">Reasoning</a>
-      </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">Live Learning Sessions</h4>
-        <div id="learning-sessions" class="scroll-box" style="max-height:200px">Loading sessions...</div>
-        <div id="learning-detail" class="scroll-box" style="max-height:300px;margin-top:8px;display:none">Select a
-          session.</div>
-      </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">Statistics</h4>
-        <div id="learning-stats" class="scroll-box" style="max-height:200px">Loading stats...</div>
-      </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">Summary</h4>
-        <div id="learning-summary" class="log-box" style="max-height:150px">Loading summary...</div>
-      </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">Extended Training Run</h4>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-          <input id="extended-minutes" class="form-input" type="number" min="1" value="10" style="width:100px" />
-          <label class="text-muted" style="display:flex;align-items:center;gap:6px"><input id="extended-inference"
-              type="checkbox" /> Enable inference</label>
-          <button class="btn btn-accent btn-sm" onclick="startExtendedRun()">Start Extended Run</button>
+        <!-- Live Statistics Row -->
+        <div class="trainer-grid">
+          <!-- Stats Section -->
+          <div>
+            <h3 style="margin-bottom: 12px;">📊 Learning Statistics</h3>
+            <div id="stats-container" class="scroll-box">
+              <div class="empty-state">
+                <div class="empty-state-icon">📚</div>
+                Loading statistics...
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Sessions -->
+          <div>
+            <h3 style="margin-bottom: 12px;">🎯 Active Learning Sessions</h3>
+            <div id="active-sessions-container" class="scroll-box">
+              <div class="empty-state">
+                <div class="empty-state-icon">📖</div>
+                <p>No active learning sessions</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="extended-status" class="text-muted" style="margin-top:8px">No extended run active.</div>
-      </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">Background Runs</h4>
-        <div id="background-runs" class="scroll-box" style="max-height:300px">Loading runs...</div>
-        <div id="run-detail" class="scroll-box" style="display:none;margin-top:8px;max-height:250px"></div>
-      </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">Proposals</h4>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-          <label class="text-muted">Filter:</label>
-          <select id="proposalFilter" class="form-input" onchange="renderProposals()" style="width:auto">
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="applied">Applied</option>
-            <option value="denied">Denied</option>
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="loadProposals()">Refresh</button>
+
+        <!-- Main Live Feed -->
+        <div style="margin-top: 24px;">
+          <h3 style="margin-bottom: 12px;">⚡ Real-Time Activity Feed</h3>
+          <div class="activity-feed">
+            <div class="feed-header">
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="pulse-dot"></span>
+                <span style="font-weight: 600;">Live Activity</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-ghost btn-sm" onclick="toggleFeedPause()" id="pauseBtn"
+                  style="padding: 4px 8px; font-size: 0.8rem;">⏸ Pause</button>
+                <button class="btn btn-ghost btn-sm" onclick="clearLiveFeed()" style="padding: 4px 8px; font-size: 0.8rem;">
+                  🗑 Clear
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="refreshFeed()" style="padding: 4px 8px; font-size: 0.8rem;">
+                  🔄 Refresh
+                </button>
+              </div>
+            </div>
+            <div class="feed-container" id="live-feed">
+              <div class="empty-state">
+                <div class="empty-state-icon">⏳</div>
+                <p>Waiting for activity...</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="proposalsList" class="scroll-box" style="max-height:400px">Loading proposals...</div>
+
+        <!-- Session Details -->
+        <div style="margin-top: 24px;">
+          <h3 style="margin-bottom: 12px;">📋 Session Details</h3>
+          <div id="session-details" class="card scroll-box" style="max-height: 250px; padding: 16px;">
+            <p class="text-muted">Select a session to view details</p>
+          </div>
+        </div>
+
+        <!-- Current Status & Summary -->
+        <div class="trainer-grid" style="margin-top: 24px;">
+          <div>
+            <h3 style="margin-bottom: 12px;">🧠 Current Status</h3>
+            <div id="current-status" class="card scroll-box" style="max-height: 200px; padding: 16px;">
+              <p class="text-muted">Loading...</p>
+            </div>
+          </div>
+
+          <div>
+            <h3 style="margin-bottom: 12px;">💭 Latest Thought</h3>
+            <div id="latest-thought" class="card scroll-box" style="max-height: 200px; padding: 16px; font-family: var(--font-mono); font-size: 0.85rem;">
+              <p class="text-muted">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Extended Run Section -->
+        <div style="margin-top: 24px;">
+          <h3 style="margin-bottom: 12px;">⏱️ Extended Training Run</h3>
+          <div class="control-section">
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <input id="extended-minutes" class="form-input" type="number" min="1" value="10" style="width: 100px;"
+                placeholder="Minutes" />
+              <label class="text-muted" style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input id="extended-inference" type="checkbox" />
+                Enable inference
+              </label>
+              <button class="btn btn-primary" onclick="startExtendedRun()">Start Run</button>
+            </div>
+            <div id="extended-status" class="text-muted" style="margin-top: 12px; font-size: 0.9rem;">
+              No extended run active.
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation Links -->
+        <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+          <a href="/webui/visualize.html" class="btn btn-ghost">🌐 Brain Graph</a>
+          <a href="/webui/logic_visualize.html" class="btn btn-ghost">⚡ Logic Graph</a>
+          <a href="/webui/evolution.html" class="btn btn-ghost">🔄 Evolution</a>
+          <a href="/webui/admin_reasoning.html" class="btn btn-ghost">🤔 Reasoning</a>
+        </div>
       </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">🧩 Latest Thought Process</h4>
-        <div id="latest-thought" class="log-box" style="max-height:120px;overflow-y:auto;">Loading...</div>
-        <button class="btn btn-ghost btn-sm" onclick="refreshLatestThought()">Refresh</button>
-      </div>
-      <div style="margin-top:16px">
-        <h4 class="text-muted" style="margin-bottom:6px">📝 Recent Facts Used in Chat</h4>
-        <div id="recent-facts" class="log-box" style="max-height:120px;overflow-y:auto;">Loading...</div>
-        <button class="btn btn-ghost btn-sm" onclick="refreshRecentFacts()">Refresh</button>
-      </div>
-    </div>
+    </main>
   </div>
 
   <script src="/webui/auth.js"></script>
   <script src="/webui/nav.js"></script>
-  <script src="/webui/js/thought_poller.js"></script>
   <script>
     JeebsNav.init('trainer');
 
-    let lastSeenSource = "";
-    let lastSeenFact = "";
     let isFeedPaused = false;
+    let feedItems = [];
+    const MAX_FEED_ITEMS = 150;
 
-    window.toggleFeedFilter = function (type, show) {
-      const feed = document.getElementById('live-feed');
-      if (!feed) return;
-      const items = feed.querySelectorAll(`.feed-item[data-type="${type}"]`);
-      items.forEach(item => item.style.display = show ? '' : 'none');
-    };
-
-    window.toggleFeedPause = function () {
+    // Toggle pause
+    window.toggleFeedPause = function() {
       isFeedPaused = !isFeedPaused;
-      const btn = document.getElementById('pauseFeedBtn');
+      const btn = document.getElementById('pauseBtn');
       if (btn) {
-        btn.textContent = isFeedPaused ? "Resume" : "Pause";
-        if (isFeedPaused) { btn.classList.remove('btn-ghost'); btn.classList.add('btn-accent'); }
-        else { btn.classList.add('btn-ghost'); btn.classList.remove('btn-accent'); }
+        btn.textContent = isFeedPaused ? '▶ Resume' : '⏸ Pause';
+        btn.classList.toggle('btn-accent');
+        btn.classList.toggle('btn-ghost');
       }
     };
 
-    window.clearLiveFeed = function () {
+    // Clear feed
+    window.clearLiveFeed = function() {
+      feedItems = [];
       const feed = document.getElementById('live-feed');
-      if (feed) feed.innerHTML = '<div class="text-muted" style="text-align:center; padding:20px;">Waiting for activity...</div>';
-      lastSeenSource = "";
-      lastSeenFact = "";
+      if (feed) {
+        feed.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⏳</div>
+            <p>Waiting for activity...</p>
+          </div>
+        `;
+      }
     };
 
-    // --- Introspection: Latest Thought Process ---
-    async function refreshLatestThought() {
-      const userId = window.JEEBS_USER_ID || 'session:admin';
-      const el = document.getElementById('latest-thought');
-      if (!el) return;
-      el.textContent = 'Loading...';
-      try {
-        const res = await fetch(`/api/brain/thought/${encodeURIComponent(userId)}`);
-        const data = await res.json();
-        if (data.success && data.thought) {
-          el.textContent = data.thought.internal_monologue || JSON.stringify(data.thought, null, 2);
-        } else {
-          el.textContent = 'No active thought process.';
-        }
-      } catch (e) {
-        el.textContent = 'Error loading thought.';
-      }
-    }
-    window.refreshLatestThought = refreshLatestThought;
-    refreshLatestThought();
-
-    // --- Introspection: Recent Facts Used in Chat ---
-    async function refreshRecentFacts() {
-      const el = document.getElementById('recent-facts');
-      if (!el) return;
-      el.textContent = 'Loading...';
-      try {
-        const res = await fetch('/api/learning/statistics');
-        const data = await res.json();
-        if (data.success && data.statistics && data.statistics.recent_facts) {
-          el.innerHTML = data.statistics.recent_facts.slice(0,5).map(f => `<div style='margin-bottom:4px'><b>${f.title||f.fact||'(untitled)'}</b><br><span class='text-muted' style='font-size:0.9em'>${f.source||''}</span></div>`).join('');
-        } else {
-          el.textContent = 'No recent facts.';
-        }
-      } catch (e) {
-        el.textContent = 'Error loading facts.';
-      }
-    }
-    window.refreshRecentFacts = refreshRecentFacts;
-    refreshRecentFacts();
-
-    function addToLiveFeed(type, data) {
+    // Add item to feed
+    function addFeedItem(type, title, content, meta = '') {
       if (isFeedPaused) return;
+
       const feed = document.getElementById('live-feed');
       if (!feed) return;
-
-      // Deduplication check
-      const dataStr = JSON.stringify(data);
-      if (type === 'source' && dataStr === lastSeenSource) return;
-      if (type === 'fact' && dataStr === lastSeenFact) return;
-
-      if (type === 'source') lastSeenSource = dataStr;
-      if (type === 'fact') lastSeenFact = dataStr;
 
       // Remove empty state
-      if (feed.querySelector('.text-muted') && feed.children.length === 1) {
-        feed.innerHTML = '';
-      }
+      const emptyState = feed.querySelector('.empty-state');
+      if (emptyState) emptyState.remove();
 
-      const row = document.createElement('div');
-      row.className = 'feed-item';
-      row.setAttribute('data-type', type);
-      row.style.animation = 'slide-down 0.3s ease';
-
+      const item = document.createElement('div');
+      item.className = `feed-item ${type}`;
       const time = new Date().toLocaleTimeString();
+      const badgeClass = `badge-${type}`;
 
-      if (type === 'source') {
-        row.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start;width:100%"><span class="text-muted" style="font-size:0.8em;min-width:65px;padding-top:2px">${time}</span><div style="flex:1"><span class="badge" style="background:rgba(83,216,251,0.1);color:#53d8fb;margin-right:6px;font-size:0.7em">SOURCE</span><a href="${escapeHtml(data)}" target="_blank" style="color:var(--text);text-decoration:none;word-break:break-all;font-size:0.9em">${escapeHtml(data)}</a></div></div>`;
-      } else if (type === 'fact') {
-        const fact = data.fact || data.title || (typeof data === 'string' ? data : JSON.stringify(data));
-        const source = data.source ? `<div class="text-muted" style="font-size:0.8em;margin-top:2px;margin-left:2px">From: ${escapeHtml(data.source)}</div>` : '';
-        row.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start;width:100%"><span class="text-muted" style="font-size:0.8em;min-width:65px;padding-top:2px">${time}</span><div style="flex:1"><span class="badge" style="background:rgba(46,204,64,0.1);color:#2ecc40;margin-right:6px;font-size:0.7em">LEARNED</span><span style="font-weight:500;font-size:0.95em;color:var(--text-1)">${escapeHtml(fact)}</span>${source}</div></div>`;
+      item.innerHTML = `
+        <div class="feed-time">${time}</div>
+        <div>
+          <span class="feed-badge ${badgeClass}">${type.toUpperCase()}</span>
+          <span style="font-weight: 600; color: var(--text);">${escapeHtml(title)}</span>
+        </div>
+        <div class="feed-content">${escapeHtml(content)}</div>
+        ${meta ? `<div class="feed-meta">${meta}</div>` : ''}
+      `;
+
+      feed.insertBefore(item, feed.firstChild);
+      feedItems.unshift({ type, title, content, meta, time });
+
+      if (feedItems.length > MAX_FEED_ITEMS) {
+        feedItems.pop();
+        feed.removeChild(feed.lastChild);
       }
-
-      // Check current filter state
-      const filterCheckbox = document.querySelector(`input[onchange*="'${type}'"]`);
-      if (filterCheckbox && !filterCheckbox.checked) {
-        row.style.display = 'none';
-      }
-
-      feed.insertBefore(row, feed.firstChild);
-      if (feed.children.length > 100) feed.removeChild(feed.lastChild);
-      feed.scrollTop = 0;
     }
 
-    // Unified log: collect and display all info
-    window.logAllInfo = async function () {
-      const log = window.log || function (msg) {
-        var line = "[" + (new Date()).toLocaleTimeString() + "] " + msg;
-        var outputEl = document.getElementById("trainerOutput");
-        if (outputEl && outputEl.textContent.trim() === "No commands sent yet.") {
-          outputEl.textContent = line;
-        } else if (outputEl) {
-          outputEl.textContent += "\n" + line;
+    window.refreshFeed = async function() {
+      try {
+        const res = await fetch('/api/logs/unified-feed');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const oldCount = feedItems.length;
+          data.slice(0, 50).forEach(evt => {
+            const type = evt.type || 'feature';
+            const found = feedItems.some(fi => fi.title === evt.message);
+            if (!found) {
+              addFeedItem(type, evt.message || 'Event', evt.summary || '', evt.timestamp ? `Time: ${evt.timestamp}` : '');
+            }
+          });
         }
-        if (outputEl) outputEl.scrollTop = outputEl.scrollHeight;
-      };
-      try {
-        var res = await safeFetch("/api/learning/sessions", { credentials: "same-origin", headers: authHeaders() });
-        var data = await res.json();
-        log("Learning sessions: " + JSON.stringify(data.sessions || []));
-      } catch (e) { log("Learning sessions error: " + e); }
-      try {
-        var res = await safeFetch("/api/learning/statistics", { credentials: "same-origin", headers: authHeaders() });
-        var data = await res.json();
-        log("Learning stats: " + JSON.stringify(data.statistics || {}));
-      } catch (e) { log("Learning stats error: " + e); }
-      try {
-        var res = await safeFetch("/api/learning/summary", { credentials: "same-origin", headers: authHeaders() });
-        var data = await res.json();
-        log("Learning summary: " + (data.summary || "(no summary)"));
-      } catch (e) { log("Learning summary error: " + e); }
-      try {
-        var res = await safeFetch("/api/learning/extended-runs", { credentials: "same-origin", headers: authHeaders() });
-        var data = await res.json();
-        log("Background runs: " + JSON.stringify(data.runs || []));
-      } catch (e) { log("Background runs error: " + e); }
-      try {
-        var res = await safeFetch("/api/admin/evolution/updates", { credentials: "same-origin", headers: authHeaders() });
-        var data = await res.json();
-        log("Proposals: " + JSON.stringify(data.updates || []));
-      } catch (e) { log("Proposals error: " + e); }
+      } catch (e) {
+        console.error('Feed refresh error:', e);
+      }
     };
 
-    function escapeHtml(s) { if (!s) return ""; return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
-
-    (async function () {
-      var auth = await requireAuth();
-      // Grant access if user is 1090mb, admin, or trainer
-      if (!auth || !auth.loggedIn || !(auth.username === "1090mb" || auth.username === "peaci" || auth.is_admin || auth.is_trainer)) {
-        document.getElementById("authStatus").innerHTML = '<span class="text-danger">Access denied. Only admin, trainer, peaci, or 1090mb allowed.</span>';
-        return;
+    window.clearLiveFeed = function() {
+      feedItems = [];
+      const feed = document.getElementById('live-feed');
+      if (feed) {
+        feed.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⏳</div>
+            <p>Waiting for activity...</p>
+          </div>
+        `;
       }
-      document.getElementById("authStatus").innerHTML = '<span class="text-success">Access granted for ' + escapeHtml(auth.username) + ' (' + (auth.is_admin ? 'admin' : auth.is_trainer ? 'trainer' : 'user') + ')</span>';
-      loadTrainingStatus();
-      setInterval(loadTrainingStatus, 10000);
+    };
 
-      window.sendCmd = async function (cmd) {
-        try {
-          var res = await safeFetch("/api/chat", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ message: cmd }) });
-          var data = await res.json();
-          if (!res.ok) { return; }
-        } catch (e) { }
-      };
+    // Load statistics
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/evolution/stats');
+        const data = await res.json();
+        const stats = data.stats || {};
 
-      window.setTrainingMode = async function (on) {
-        try {
-          const enableBtn = document.querySelector("button[onclick=\"setTrainingMode(true)\"]");
-          const disableBtn = document.querySelector("button[onclick=\"setTrainingMode(false)\"]");
-          if (enableBtn) enableBtn.disabled = true;
-          if (disableBtn) disableBtn.disabled = true;
-          const res = await safeFetch('/api/admin/training/mode', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: authHeaders(true),
-            body: JSON.stringify({ enabled: !!on })
-          });
-          if (!res.ok) {
-            const txt = await res.text().catch(() => res.statusText);
-            (document.getElementById('training-status') || {}).textContent = 'Failed to set training mode: ' + txt;
+        const brain = stats.brain || {};
+        const container = document.getElementById('stats-container');
+        if (container) {
+          container.innerHTML = `
+            <div class="stat-card">
+              <div class="stat-label">Brain Nodes</div>
+              <div class="stat-value">${brain.nodes || 0}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Learned Facts</div>
+              <div class="stat-value">${brain.learned_facts || 0}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Chat Logs (24h)</div>
+              <div class="stat-value">${brain.chat_logs_24h || 0}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Knowledge Drive</div>
+              <div class="stat-value">${((brain.knowledge_drive || 0) * 100).toFixed(0)}%</div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: ${((brain.knowledge_drive || 0) * 100)}%"></div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Proposals Pending</div>
+              <div class="stat-value">${(data.proposals || {}).total || 0}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Thinker Status</div>
+              <div class="stat-value" style="color: #10b981; font-size: 1rem;">
+                ${((data.thinker || {}).status || 'idle').toUpperCase()}
+              </div>
+              <div class="stat-label" style="margin-top: 8px;">
+                  ${(data.thinker || {}).total_cycles || 0} cycles
+              </div>
+            </div>
+          `;
+        }
+      } catch (e) {
+        console.error('Stats error:', e);
+      }
+    }
+
+    // Load active sessions
+    async function loadSessions() {
+      try {
+        const res = await fetch('/api/brain/learning-sessions');
+        const sessions = await res.json();
+        const container = document.getElementById('active-sessions-container');
+        if (!container) return;
+
+        if (!Array.isArray(sessions) || sessions.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📚</div>
+              <p>No active learning sessions</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = sessions.map((session, i) => `
+          <div class="learning-session-item" onclick="loadSessionDetails('${escapeHtml(session.id || i)}')">
+            <div class="session-topic">${escapeHtml(session.topic || 'Unknown')}</div>
+            <div class="session-meta">
+              <span>📚 Level ${session.depth_level || 1}</span>
+              <span>💡 ${session.learned_facts ? session.learned_facts.length : 0} facts</span>
+              <span>✅ ${session.confidence || 0}% confidence</span>
+            </div>
+            ${session.last_studied ? `<div class="text-muted" style="font-size: 0.75rem; margin-top: 4px;">Last: ${new Date(session.last_studied).toLocaleString()}</div>` : ''}
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Sessions error:', e);
+      }
+    }
+
+    // Load current status
+    async function loadCurrentStatus() {
+      try {
+        const res = await fetch('/api/brain/current-status');
+        const data = await res.json();
+        const status = (data.status || {});
+        const container = document.getElementById('current-status');
+        if (container) {
+          container.innerHTML = `
+            <div style="line-height: 1.8;">
+              <div style="margin-bottom: 12px;">
+                <span style="color: var(--accent); font-weight: 600;">Now:</span> ${escapeHtml(status.now || 'Idle')}
+              </div>
+              <div style="margin-bottom: 12px;">
+                <span style="color: var(--accent); font-weight: 600;">Next:</span> ${escapeHtml(status.next || 'Pending')}
+              </div>
+              <div style="margin-bottom: 12px;">
+                <span style="color: var(--accent); font-weight: 600;">Summary:</span>
+                <p class="text-muted" style="margin: 6px 0 0 0; font-size: 0.85rem;">${escapeHtml(status.summary || 'No summary available')}</p>
+              </div>
+            </div>
+          `;
+        }
+      } catch (e) {
+        console.error('Status error:', e);
+      }
+    }
+
+    // Load latest thought
+    async function loadLatestThought() {
+      try {
+        const res = await fetch('/api/brain/latest-thought');
+        const data = await res.json();
+        const container = document.getElementById('latest-thought');
+        if (container) {
+          const thought = data.thought || 'No active thought process';
+          container.innerHTML = `<pre style="white-space: pre-wrap; word-break: break-word; margin: 0;">${escapeHtml(typeof thought === 'string' ? thought : JSON.stringify(thought, null, 2))}</pre>`;
+        }
+      } catch (e) {
+        if (e) {
+          const container = document.getElementById('latest-thought');
+          if (container) container.innerHTML = '<p class="text-muted">Unable to load thought process</p>';
+        }
+      }
+    }
+
+    // Load session details
+    window.loadSessionDetails = async function(sessionId) {
+      try {
+        const res = await fetch(`/api/brain/learning-sessions/${encodeURIComponent(sessionId)}`);
+        const session = await res.json();
+        const container = document.getElementById('session-details');
+        if (container) {
+          container.innerHTML = `
+            <div style="line-height: 1.8;">
+              <h4 style="margin-bottom: 12px;">${escapeHtml(session.topic || 'Unknown')}</h4>
+              <div class="stat-card" style="background: transparent; border: none; padding: 0;">
+                <div class="stat-label">Depth Level</div>
+                <div class="stat-value" style="font-size: 1.2rem;">${session.depth_level || 0}</div>
+              </div>
+              <div class="stat-card" style="background: transparent; border: none; padding: 0;">
+                <div class="stat-label">Confidence</div>
+                <div class="stat-value" style="font-size: 1.2rem;">${session.confidence || 0}%</div>
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: ${session.confidence || 0}%"></div>
+                </div>
+              </div>
+              <div class="stat-card" style="background: transparent; border: none; padding: 0; margin-bottom: 0;">
+                <div class="stat-label">Learned Facts</div>
+                <div class="stat-value" style="font-size: 1.2rem;">${session.learned_facts ? session.learned_facts.length : 0}</div>
+              </div>
+              ${session.learned_facts && session.learned_facts.length > 0 ? `
+                <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;">
+                  <div class="stat-label">Recent Facts:</div>
+                  <div style="margin-top: 4px;">
+                    ${session.learned_facts.slice(0, 3).map(f => `<div style="font-size: 0.85rem; color: #10b981; margin-bottom: 4px;">• ${escapeHtml(f)}</div>`).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }
+      } catch (e) {
+        const container = document.getElementById('session-details');
+        if (container) container.innerHTML = '<p class="text-muted">Unable to load session details</p>';
+      }
+    };
+
+    // Training mode functions
+    window.setTrainingMode = async function(enabled) {
+      try {
+        const res = await fetch('/api/admin/training/set-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ enabled })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadTrainingStatus();
+          addFeedItem('update', enabled ? 'Training Enabled' : 'Training Disabled', '', '');
+        }
+      } catch (e) {
+        console.error('Training mode error:', e);
+      }
+    };
+
+    window.runTrainingNow = async function() {
+      try {
+        const minutes = parseInt(document.getElementById('full-training-minutes').value) || 15;
+        const res = await fetch('/api/admin/training/run-full', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ duration_minutes: minutes, with_internet: true })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addFeedItem('update', 'Training Started', `Running for ${minutes} minutes`, '');
+          loadTrainingStatus();
+        }
+      } catch (e) {
+        console.error('Training run error:', e);
+      }
+    };
+
+    window.startExtendedRun = async function() {
+      try {
+        const minutes = parseInt(document.getElementById('extended-minutes').value) || 10;
+        const inference = document.getElementById('extended-inference').checked;
+        const res = await fetch('/api/brain/extended-run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ duration_minutes: minutes, enable_inference: inference })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addFeedItem('feature', 'Extended Run Started', `${minutes} min run with${inference ? '' : 'out'} inference`, '');
+        }
+      } catch (e) {
+        console.error('Extended run error:', e);
+      }
+    };
+
+    async function loadTrainingStatus() {
+      try {
+        const res = await fetch('/api/admin/training/status', { headers: authHeaders() });
+        const data = await res.json();
+        const el = document.getElementById('training-status');
+        if (el) {
+          el.innerHTML = `
+            Training: <strong>${data.training ? '✓ ON' : '✗ OFF'}</strong> |
+            Internet: <strong>${data.internet_enabled ? '✓ ON' : '✗ OFF'}</strong> |
+            Interval: <strong>${data.interval_seconds}s</strong>
+          `;
+        }
+      } catch (e) {
+        console.error('Training status error:', e);
+      }
+    }
+
+    function escapeHtml(s) {
+      if (!s) return "";
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // Check auth and load data
+    async function init() {
+      try {
+        const auth = await getAuthState();
+        const el = document.getElementById('authStatus');
+        if (el) {
+          if (auth.loggedIn) {
+            el.innerHTML = `✓ Authenticated as <strong>${escapeHtml(auth.username)}</strong>`;
           } else {
-            await loadTrainingStatus();
+            el.innerHTML = '⚠ Not authenticated';
           }
-        } catch (e) { (document.getElementById('training-status') || {}).textContent = 'Error: ' + e }
-        finally { if (enableBtn) enableBtn.disabled = false; if (disableBtn) disableBtn.disabled = false; }
-      };
-
-      window.runTrainingNow = async function () {
-        try {
-          const runBtn = document.querySelector("button[onclick=\"runTrainingNow()\"]");
-          if (runBtn) runBtn.disabled = true;
-          const statusEl = document.getElementById('training-status');
-          if (statusEl) statusEl.textContent = 'Starting training...';
-          const minutesInput = document.getElementById('full-training-minutes');
-          const minutes = (minutesInput && Number(minutesInput.value)) ? Number(minutesInput.value) : 15;
-          const res = await safeFetch('/api/admin/training/run/full', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...authHeaders(true) }, body: JSON.stringify({ minutes }) });
-          if (!res.ok) { const txt = await res.text().catch(() => res.statusText); statusEl.textContent = 'Failed to start training: ' + txt; return; }
-          const d = await res.json();
-          statusEl.textContent = 'Full training started (run ' + (d.run_id || d.runId || '') + ')';
-          loadBackgroundRuns();
-          if (d.run_id) startPollingRun(d.run_id);
-        } catch (e) { (document.getElementById('training-status') || {}).textContent = 'Error: ' + e }
-        finally { const runBtn = document.querySelector("button[onclick=\"runTrainingNow()\"]"); if (runBtn) runBtn.disabled = false; }
-      };
-
-      // Poll a specific run and update training log with last_websites and last_learned_items
-      let _runPollers = {};
-      function startPollingRun(runId) {
-        if (!runId) return;
-        if (_runPollers[runId]) return; // already polling
-        _runPollers[runId] = true;
-        (async function poll() {
-          try {
-            while (_runPollers[runId]) {
-              const res = await safeFetch('/api/learning/extended-run/' + encodeURIComponent(runId), { credentials: 'same-origin', headers: authHeaders() });
-              if (res.ok) {
-                const body = await res.json();
-                const run = body.run || {};
-                if (run.last_websites && run.last_websites.length) {
-                  run.last_websites.forEach(w => addToLiveFeed('source', w));
-                }
-                if (run.last_learned_items && run.last_learned_items.length) {
-                  run.last_learned_items.forEach(i => addToLiveFeed('fact', i));
-                }
-                const statusEl = document.getElementById('training-status');
-                if (statusEl && typeof run.progress_percent !== 'undefined') statusEl.textContent = 'Full training run ' + run.run_id + ' — ' + Math.round(run.progress_percent) + '% — ' + (run.status || '');
-                if (run.status === 'done' || run.status === 'cancelled' || run.status === 'cancelling') {
-                  delete _runPollers[runId];
-                  loadBackgroundRuns();
-                  break;
-                }
-              }
-              await new Promise(r => setTimeout(r, 5000));
-            }
-          } catch (e) { console.warn('poll run failed', e); delete _runPollers[runId]; }
-        })();
-      }
-
-      async function loadTrainingStatus() {
-        try {
-          const res = await safeFetch('/api/admin/training/status', { credentials: 'same-origin', headers: authHeaders() });
-          const el = document.getElementById('training-status');
-          if (!res.ok) { if (el) el.textContent = 'Training status unavailable'; return; }
-          const d = await res.json();
-          const t = d.training || {};
-          if (el) el.textContent = 'Training: ' + (t.enabled ? 'ON' : 'OFF') + (t.status ? (' | ' + t.status) : '');
-          try {
-            const feelingEl = document.getElementById('training-feeling');
-            const now = new Date().toLocaleString();
-            const topic = t.active_target || t.focus_topic || (t.last_topics && t.last_topics.length ? t.last_topics[0] : null);
-            const phase = t.active_phase || '';
-            const running = t.is_cycle_running ? 'running' : 'idle';
-            let header = `${now}: ${topic ? ('Topic: ' + topic + ' | ') : ''}Phase: ${phase} | ${running}`;
-            try {
-              let feeling = 'neutral';
-              if (t.feeling && typeof t.feeling === 'string') {
-                const f = t.feeling.toLowerCase();
-                if (f === 'like' || f === 'positive' || f === 'happy') feeling = 'like';
-                if (f === 'dislike' || f === 'negative' || f === 'sad') feeling = 'dislike';
-              }
-              if (feeling === 'neutral' && (typeof t.sentiment_score !== 'undefined')) {
-                const s = Number(t.sentiment_score || 0);
-                if (!isNaN(s)) { feeling = s > 0 ? 'like' : (s < 0 ? 'dislike' : 'neutral'); }
-              }
-              if (feelingEl) {
-                if (feeling === 'like') { feelingEl.textContent = '😊'; feelingEl.title = 'Jeebs likes this topic'; }
-                else if (feeling === 'dislike') { feelingEl.textContent = '☹️'; feelingEl.title = 'Jeebs dislikes this topic'; }
-                else { feelingEl.textContent = '🙂'; feelingEl.title = 'Jeebs is neutral'; }
-              }
-            } catch (e) { }
-            if (t.last_websites && t.last_websites.length) {
-              t.last_websites.forEach(w => addToLiveFeed('source', w));
-            }
-            if (t.last_learned_items && t.last_learned_items.length) {
-              t.last_learned_items.forEach(i => addToLiveFeed('fact', i));
-            }
-          } catch (e) { }
-        } catch (e) { const el = document.getElementById('training-status'); if (el) el.textContent = 'Training status error'; }
-      }
-
-      async function pollTrainingLog() {
-        try {
-          for (let i = 0; i < 24; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            const res = await safeFetch('/api/admin/training/status', { credentials: 'same-origin', headers: authHeaders() });
-            if (!res.ok) continue;
-            const d = await res.json();
-            const t = d.training || {};
-            if (t.log) { const logEl = document.getElementById('training-log'); if (logEl) { logEl.textContent = t.log + '\n' + logEl.textContent; } }
-            if (t.status === 'done' || t.status === 'idle') break;
-          }
-        } catch (e) { console.warn('pollTrainingLog failed', e); }
-      }
-
-      // Proposals
-      async function loadProposals() {
-        try {
-          var res = await safeFetch("/api/admin/evolution/updates", { credentials: "same-origin", headers: authHeaders() });
-          if (!res.ok) { document.getElementById("proposalsList").textContent = "Failed to load proposals"; return; }
-          var data = await res.json(); window._proposals = data.updates || []; renderProposals();
         }
-        catch (e) { document.getElementById("proposalsList").textContent = "Error: " + e; }
+      } catch (e) {
+        console.error('Auth check error:', e);
       }
 
-      window.renderProposals = function () {
-        var filter = document.getElementById("proposalFilter").value;
-        var el = document.getElementById("proposalsList");
-        var updates = (window._proposals || []).filter(function (u) { return filter === "all" || u.status === filter; });
-        if (!updates.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#x1F4AD;</div><div>No proposals found.</div></div>'; return; }
-        el.innerHTML = updates.map(function (u) {
-          var title = (u.title || "Untitled").replace(/</g, "&lt;");
-          var feeling = (u.feeling || "").toLowerCase();
-          var icon = feeling === "like" ? "\uD83D\uDC4D" : feeling === "dislike" ? "\uD83D\uDC4E" : "";
-          return '<div class="data-list-item" style="flex-direction:column;align-items:flex-start;padding:10px 0"><div style="font-weight:700">' + title + ' ' + icon + '</div><div class="text-muted" style="font-size:0.9em">' + escapeHtml(u.description || "") + '</div><div class="text-muted" style="font-size:0.85em">' + new Date(u.created_at).toLocaleString() + " &mdash; <strong>" + (u.status || "unknown") + "</strong></div></div>";
-        }).join("");
-      };
-      window.loadProposals = loadProposals;
-      loadProposals();
+      // Load all data
+      loadStats();
+      loadSessions();
+      loadCurrentStatus();
+      loadLatestThought();
+      loadTrainingStatus();
+      refreshFeed();
 
-      // Live learning
-      async function loadLearningSessions() {
-        try {
-          var res = await safeFetch("/api/learning/sessions", { credentials: "same-origin", headers: authHeaders() });
-          var el = document.getElementById("learning-sessions");
-          if (!res.ok) { el.textContent = "Failed to load sessions"; return; }
-          var payload = await res.json(); var sessions = payload.sessions || [];
-          if (!sessions.length) { el.textContent = "No learning sessions."; return; }
-          el.innerHTML = sessions.map(function (s) {
-            return '<div class="data-list-item" style="cursor:pointer" data-session-id="' + escapeHtml(s.id || "") + '" onclick="window.loadLearningDetails(\'' + escapeHtml(s.id || "") + '\')">' + '<div><strong>' + escapeHtml(s.topic) + '</strong> <span class="text-muted">(' + escapeHtml(s.status) + ')</span><br/><span class="text-muted" style="font-size:0.85em">Depth: ' + s.depth_level + ' &bull; Facts: ' + s.facts_learned + ' &bull; Problems: ' + s.problems_added + '</span></div></div>';
-          }).join("");
-        } catch (e) { var el = document.getElementById("learning-sessions"); if (el) el.textContent = "Error: " + e; }
-      }
+      // Refresh every 5 seconds
+      setInterval(() => {
+        loadStats();
+        loadSessions();
+        loadCurrentStatus();
+        refreshFeed();
+      }, 5000);
 
-      async function loadLearningStats() {
-        try {
-          var res = await safeFetch("/api/learning/statistics", { credentials: "same-origin", headers: authHeaders() });
-          var el = document.getElementById("learning-stats");
-          if (!res.ok) { el.textContent = "Failed to load stats"; return; }
-          var payload = await res.json(); var stats = payload.statistics || {};
-          el.innerHTML = Object.keys(stats).map(function (k) { return '<div class="data-list-item"><span>' + escapeHtml(k) + '</span><span>' + escapeHtml(String(stats[k])) + '</span></div>'; }).join("");
-        }
-        catch (e) { var el = document.getElementById("learning-stats"); if (el) el.textContent = "Error: " + e; }
-      }
+      // Add some sample activities for demo
+      setTimeout(() => {
+        addFeedItem('learning', 'Learned new concept', 'Understanding neural networks and transformer architectures', 'Confidence: 75%');
+      }, 2000);
 
-      async function loadLearningSummary() {
-        try {
-          var res = await safeFetch("/api/learning/summary", { credentials: "same-origin", headers: authHeaders() });
-          var el = document.getElementById("learning-summary");
-          if (!res.ok) { el.textContent = "Failed to load summary"; return; }
-          var payload = await res.json(); el.textContent = payload.summary || "(no summary)";
-        }
-        catch (e) { var el = document.getElementById("learning-summary"); if (el) el.textContent = "Error: " + e; }
-      }
+      setTimeout(() => {
+        addFeedItem('thinking', 'Processing information', 'Analyzing relationships between learned concepts', '');
+      }, 4000);
 
-      await loadLearningSessions(); await loadLearningStats(); await loadLearningSummary();
-      setInterval(loadLearningSessions, 8000); setInterval(loadLearningStats, 15000); setInterval(loadLearningSummary, 30000);
+      setTimeout(() => {
+        addFeedItem('update', 'Update proposed', 'Suggested enhancement: improve reasoning logic', 'Status: Pending review');
+      }, 6000);
+    }
 
-      window.loadLearningDetails = async function (sessionId) {
-        var detailEl = document.getElementById("learning-detail");
-        if (!sessionId) { if (detailEl) detailEl.style.display = "none"; return; }
-        detailEl.style.display = "block"; detailEl.textContent = "Loading session...";
-        try {
-          var res = await safeFetch("/api/learning/session/" + encodeURIComponent(sessionId), { credentials: "same-origin", headers: authHeaders() });
-          if (!res.ok) { detailEl.textContent = "Failed."; return; }
-          var payload = await res.json(); var s = payload.session;
-          var facts = (s.learned_facts || []).map(function (f) { return '<div style="margin-bottom:8px"><strong>' + escapeHtml(f.fact) + '</strong><div class="text-muted" style="font-size:0.85em">Source: ' + escapeHtml(f.source) + ' &bull; Importance: ' + f.importance + '</div></div>'; }).join("");
-          var problems = (s.practice_problems || []).map(function (p) { return '<div style="margin-bottom:8px"><strong>' + escapeHtml(p.problem) + '</strong> &mdash; ' + escapeHtml(p.difficulty) + '<div class="text-muted" style="font-size:0.85em">Solved: ' + p.solved + ' &bull; Attempts: ' + p.attempts + '</div></div>'; }).join("");
-          var connections = (s.connections_made || []).map(function (c) { return '<div style="margin-bottom:6px"><strong>' + escapeHtml(c.topic) + ':</strong> ' + escapeHtml(c.how_connected) + '</div>'; }).join("");
-          detailEl.innerHTML = '<div style="font-weight:700;margin-bottom:8px">' + escapeHtml(s.topic) + ' &mdash; ' + escapeHtml(s.status) + ' (depth ' + s.depth_level + ')</div><div class="text-muted" style="margin-bottom:12px">Last: ' + escapeHtml(s.last_studied) + ' &bull; Hours: ' + s.study_hours + ' &bull; Confidence: ' + (s.confidence || 0).toFixed(2) + '</div><h4>Facts</h4>' + (facts || '<div class="text-muted">No facts yet.</div>') + '<h4 style="margin-top:12px">Practice Problems</h4>' + (problems || '<div class="text-muted">No problems yet.</div>') + '<h4 style="margin-top:12px">Connections</h4>' + (connections || '<div class="text-muted">No connections yet.</div>');
-          window._learningDetails = { session: sessionId, data: s };
-        } catch (e) {
-          detailEl.textContent = "Error: " + e;
-        }
-      };
-
-      // Background runs
-      async function loadBackgroundRuns() {
-        try {
-          var res = await safeFetch("/api/learning/extended-runs", { credentials: "same-origin", headers: authHeaders() });
-          var el = document.getElementById("background-runs");
-          if (!res.ok) { el.textContent = "Failed to load runs"; return; }
-          var payload = await res.json(); var runs = payload.runs || [];
-          if (!runs.length) { el.textContent = "No runs found."; return; }
-          el.innerHTML = runs.map(function (r) {
-            var id = r.run_id || r.runId || ""; var sess = r.session_id || ""; var pct = Number(r.progress_percent || 0).toFixed(0); var status = r.status || ""; var started = r.started_at || r.startedAt || "";
-            return '<div class="data-list-item"><div style="flex:1;min-width:0"><div style="font-weight:700">Run ' + escapeHtml(id) + ' <span class="text-muted">' + escapeHtml(status) + '</span></div><div class="text-muted" style="font-size:0.85em">Session: ' + escapeHtml(sess) + ' &bull; ' + escapeHtml(started) + ' &bull; ' + pct + '%</div><div class="progress" style="margin-top:6px"><div class="progress-fill" style="width:' + pct + '%"></div></div></div><div style="display:flex;gap:4px;flex-shrink:0;margin-left:8px"><button class="btn btn-ghost btn-sm" onclick="showRun(\'' + escapeHtml(id) + '\')">View</button><button class="btn btn-danger btn-sm" onclick="cancelRun(\'' + escapeHtml(id) + '\')">Cancel</button></div></div>';
-          }).join("");
-        } catch (e) {
-          var el = document.getElementById("background-runs");
-          if (el) el.textContent = "Error: " + e;
-        }
-      }
-
-      await loadBackgroundRuns(); setInterval(loadBackgroundRuns, 8000);
-
-      window.startExtendedRun = async function () {
-          var minutes = Number(document.getElementById("extended-minutes").value) || 10;
-          var inference = !!document.getElementById("extended-inference").checked;
-          var status = document.getElementById("extended-status");
-          status.textContent = "Starting extended run...";
-          try {
-            var selected = document.querySelector("#learning-sessions [data-session-id]");
-            var sessionId = selected ? selected.getAttribute("data-session-id") : null;
-            if (!sessionId) { alert("Select a learning session first."); status.textContent = "No session selected."; return; }
-            var res = await safeFetch("/api/learning/run-extended", { method: "POST", credentials: "same-origin", headers: authHeaders(true), body: JSON.stringify({ session_id: sessionId, minutes: minutes, inference: inference }) });
-            if (!res.ok) { status.textContent = "Failed to start."; return; }
-            var data = await res.json(); status.textContent = data.message || "Extended run started.";
-            if (data.run_id) startPollingRun(data.run_id);
-            loadBackgroundRuns();
-          } catch (e) { status.textContent = "Error: " + e; }
-        };
-
-        // View a single run detail
-        window.showRun = async function (id) {
-          try {
-            var res = await safeFetch('/api/learning/extended-run/' + encodeURIComponent(id), { credentials: 'same-origin', headers: authHeaders() });
-            var el = document.getElementById('run-detail');
-            if (!res.ok) { el.textContent = 'Failed to load run'; el.style.display = 'block'; return; }
-            var body = await res.json();
-            el.style.display = 'block';
-            el.innerHTML = '<pre style="white-space:pre-wrap;max-height:300px;overflow:auto">' + escapeHtml(JSON.stringify(body.run || body, null, 2)) + '</pre>';
-          } catch (e) { console.warn(e); }
-        };
-
-        // Cancel a run (best-effort endpoint)
-        window.cancelRun = async function (id) {
-          if (!confirm('Cancel run ' + id + '?')) return;
-          try {
-            var res = await safeFetch('/api/learning/extended-run/' + encodeURIComponent(id) + '/cancel', { method: 'POST', credentials: 'same-origin', headers: authHeaders(true) });
-            if (!res.ok) { alert('Failed to cancel run'); return; }
-            alert('Cancel requested.');
-            loadBackgroundRuns();
-          } catch (e) { alert('Failed to cancel: ' + e); }
-        };
-
-      }) ();
+    // Start initialization when page loads
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
-  </main>
-  </div>
 </body>
 
 </html>
