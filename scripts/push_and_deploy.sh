@@ -10,11 +10,13 @@ VPS_USER="root"
 SSH_KEY="/Users/shoup/.ssh/jeebs_vps"
 APP_DIR="/root/JeebsAI"
 DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1476367489490358272/k5Kn7xztOWFsXYOSnmwuHCiF3CQ1WXMxvYvzt4KSf_t0zdx36mVNbj7II9y-vwA6oEOd"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Failure handling
@@ -33,6 +35,13 @@ trap notify_failure ERR
 
 echo -e "${BLUE}🚀 JeebsAI - Push and Deploy${NC}"
 echo "Target: $VPS_USER@$VPS_HOST:$APP_DIR"
+
+# Check for GITHUB_TOKEN
+if [ -z "$GITHUB_TOKEN" ]; then
+    echo -e "${YELLOW}⚠️  No GITHUB_TOKEN environment variable found.${NC}"
+    echo -e "${YELLOW}   If the repository is private, deployment may fail unless you have SSH agent forwarding setup.${NC}"
+    echo -e "${YELLOW}   To fix, run: export GITHUB_TOKEN='your_token' before running this script.${NC}"
+fi
 
 # Pre-deployment notification
 if [ -n "$DISCORD_WEBHOOK_URL" ]; then
@@ -54,7 +63,7 @@ git push origin main
 
 # 2. Remote Deploy
 echo -e "${BLUE}📡 Connecting to VPS...${NC}"
-ssh -o ConnectTimeout=30 -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
+ssh -A -o ConnectTimeout=30 -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
     set -e
     echo "📂 Navigating to $APP_DIR..."
     
@@ -62,31 +71,63 @@ ssh -o ConnectTimeout=30 -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << EOF
     mkdir -p "$APP_DIR"
     cd "$APP_DIR"
     
+    # Define URLs (using local GITHUB_TOKEN if available)
+    # Note: We escape variables we want evaluated on the remote, but leave GITHUB_TOKEN to expand locally
+    HTTPS_URL="https://github.com/Deployed-Labs/JeebsAI.git"
+    SSH_URL="git@github.com:Deployed-Labs/JeebsAI.git"
+    
+    if [ -n "$GITHUB_TOKEN" ]; then
+        HTTPS_URL="https://oauth2:$GITHUB_TOKEN@github.com/Deployed-Labs/JeebsAI.git"
+    fi
+
+    # Helper to try cloning with fallback
+    try_clone() {
+        echo "⬇️  Cloning repository..."
+        # 1. Try HTTPS (with token if provided)
+        if git clone "\$HTTPS_URL" .; then return 0; fi
+        
+        # 2. Try SSH (uses agent forwarding if available)
+        echo "⚠️  HTTPS clone failed. Trying SSH..."
+        if git clone "\$SSH_URL" .; then return 0; fi
+        
+        return 1
+    }
+
     # Check if it's a git repo, if not clone it (or init and pull if empty)
     if [ ! -d ".git" ]; then
-        echo "⬇️  Cloning repository..."
-        # Assuming public or auth configured on VPS
-        git clone https://github.com/Deployed-Labs/JeebsAI.git . || echo "Clone failed, trying to pull if dir not empty"
+        if ! try_clone; then
+            echo "❌ Clone failed. Please check permissions or GITHUB_TOKEN."
+            exit 1
+        fi
     fi
 
     echo "⬇️  Updating deployment script..."
     # Clean up potential corruption on VPS side
     find .git -name "._*" -delete 2>/dev/null || true
 
-    # Try to fetch, if fails (e.g. 500 error or corruption), re-clone
+    # Try to fetch. If it fails (auth error or corruption), try to recover.
     if ! git fetch origin; then
-        echo "⚠️  Git fetch failed. Re-cloning repository to fix corruption..."
-        cd ..
-        rm -rf "$APP_DIR"
-        git clone https://github.com/Deployed-Labs/JeebsAI.git "$APP_DIR"
-        cd "$APP_DIR"
+        echo "⚠️  Git fetch failed. Attempting to fix remote URL..."
+        
+        # Update remote URL to the one with token (or standard HTTPS)
+        git remote set-url origin "\$HTTPS_URL"
+        
+        if ! git fetch origin; then
+            echo "⚠️  Fetch failed again. Re-cloning repository..."
+            cd ..
+            rm -rf "$APP_DIR"
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+            try_clone
+        fi
     else
         git reset --hard origin/main
     fi
     
     echo "🚀 Running full VPS deployment..."
+    export REPO_URL="\$HTTPS_URL"
     chmod +x deploy_to_vps.sh
-    sudo ./deploy_to_vps.sh
+    ./deploy_to_vps.sh
 EOF
 
 echo -e "${GREEN}🎉 Deployment Complete!${NC}"
