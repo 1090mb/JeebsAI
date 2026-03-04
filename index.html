@@ -97,6 +97,26 @@
         <footer>
             <p>&copy; 2026 JeebsAI &mdash; All rights reserved.</p>
         </footer>
+    <script>
+    // ABSOLUTE LAST-RESORT: Directly set challenge on every input and button click, and on load
+    function setPGPChallenge() {
+        var loginInput = document.getElementById("loginUsername");
+        var unsignedMsg = document.getElementById("unsignedMessage");
+        if (!loginInput || !unsignedMsg) return;
+        var username = loginInput.value.trim();
+        var ts = Math.floor(Date.now() / 1000);
+        var value = `LOGIN:${username || "username"}:${ts}`;
+        unsignedMsg.value = value;
+        unsignedMsg.textContent = value;
+    }
+    window.addEventListener("DOMContentLoaded", function() {
+        setPGPChallenge();
+        var loginInput = document.getElementById("loginUsername");
+        var genBtn = document.getElementById("generateChallengeBtn");
+        if (loginInput) loginInput.addEventListener("input", setPGPChallenge);
+        if (genBtn) genBtn.addEventListener("click", setPGPChallenge);
+    });
+    </script>
     </body>
 </html>
 
