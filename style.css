@@ -1,41 +1,9 @@
-/* ══════════════════════════════════════════════════════════
-   JeebsAI — Unified Design System
-   ══════════════════════════════════════════════════════════ */
-
-/* ── CSS Reset & Variables ────────────────────────────────── */
-:root {
-    --bg-0: #f8f9fa;
-    --bg-1: #ffffff;
-    --bg-2: #f1f3f4;
-    --bg-3: #e5e7eb;
-    --panel: #f4f4f4;
-    --panel-2: #ededed;
-    --panel-hover: #e5e7eb;
-    --text: #232323;
-    --text-secondary: #555;
-    --muted: #888;
-    --accent: #222;
-    --accent-glow: rgba(34,34,34,0.08);
-    --accent-2: #555;
-    --accent-2-glow: rgba(85,85,85,0.08);
-    --good: #198754;
-    --good-glow: rgba(25,135,84,0.08);
-    --bad: #dc3545;
-    --bad-glow: rgba(220,53,69,0.08);
-    --warning: #ffc107;
-    --border: #e0e0e0;
-    --border-strong: #bdbdbd;
-    --line: #e0e0e0;
-    --shadow: rgba(0,0,0,0.04);
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 18px;
-    --font-sans: 'Inter', 'Space Grotesk', system-ui, sans-serif;
-    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
-    --transition-fast: 0.15s ease;
-    --transition-med: 0.25s ease;
-    --transition-slow: 0.4s ease;
+body {
+    background: #0a2540;
+    color: #fff;
+    font-family: sans-serif;
+    text-align: center;
+    margin-top: 10vh;
 }
 
 *,

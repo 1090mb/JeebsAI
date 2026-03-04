@@ -268,23 +268,32 @@ main() {
     build_app
     echo ""
 
+
     # Step 5: Migrations
     run_migrations
     echo ""
 
-    # Step 6: Update service config
+    # Step 6: Copy static files to nginx web root
+    info "Copying static files to /var/www/html..."
+    cp -f "$APP_DIR"/index.html "$APP_DIR"/style.css "$APP_DIR"/auth.js "$APP_DIR"/chat.js "$APP_DIR"/api.js "$APP_DIR"/ui.js /var/www/html/
+    # Remove old folders if present
+    rm -rf /var/www/html/webui /var/www/html/src
+    success "Static files updated in /var/www/html."
+    echo ""
+
+    # Step 7: Update service config
     update_service_config
     echo ""
 
-    # Step 7: Start service
+    # Step 8: Start service
     start_service
     echo ""
 
-    # Step 8: Check status
+    # Step 9: Check status
     check_status
     echo ""
 
-    # Step 9: Health check
+    # Step 10: Health check
     health_check
     echo ""
 
