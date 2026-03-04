@@ -423,7 +423,7 @@
                     var loginInput = document.getElementById("loginUsername");
                     var unsignedMsg = document.getElementById("unsignedMessage");
                     if (!loginInput || !unsignedMsg) {
-                        console.warn("PGP login: missing loginUsername or unsignedMessage element");
+                        console.error("PGP login: missing loginUsername or unsignedMessage element");
                         return;
                     }
                     const username = loginInput.value.trim();
@@ -431,7 +431,11 @@
                     const value = `LOGIN:${username || "username"}:${ts}`;
                     unsignedMsg.value = value;
                     // Debug log
-                    console.log("PGP Challenge generated:", value);
+                    if (unsignedMsg.value !== value) {
+                        console.error("PGP Challenge not set!", value);
+                    } else {
+                        console.log("PGP Challenge generated:", value);
+                    }
                 }
 
                 /* ── Chat Helpers ──────────────────────────────────── */
@@ -598,6 +602,13 @@
                     updateUnsignedMessage();
                     setStatus("Challenge refreshed.", "good");
                 });
+                // Fallback: update challenge every second if field is empty
+                setInterval(() => {
+                    var unsignedMsg = document.getElementById("unsignedMessage");
+                    if (unsignedMsg && (!unsignedMsg.value || unsignedMsg.value === "Challenge will appear here...")) {
+                        updateUnsignedMessage();
+                    }
+                }, 1000);
                 document.getElementById("copyChallengeBtn").addEventListener("click", async () => {
                     try {
                         await navigator.clipboard.writeText(document.getElementById("unsignedMessage").value);
