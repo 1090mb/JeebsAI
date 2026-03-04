@@ -605,13 +605,7 @@
                 });
                 // Generate challenge on initial page load
                 window.addEventListener("DOMContentLoaded", updateUnsignedMessage);
-                // Also update challenge after registration (when switching to login)
-                function afterRegistrationSwitchToLogin() {
-                    setView("login");
-                    updateUnsignedMessage();
-                }
-                // Patch registration handler to use afterRegistrationSwitchToLogin
-                const origRegisterHandler = document.getElementById("registerForm").onsubmit;
+                // Registration handler: update challenge after registration and switch to login
                 document.getElementById("registerForm").addEventListener("submit", async (event) => {
                     event.preventDefault();
                     const username = document.getElementById("regUsername").value.trim();
@@ -631,7 +625,8 @@
                             body: JSON.stringify({ username, email, pgp_public_key: pgpPublicKey }),
                         });
                         document.getElementById("loginUsername").value = username;
-                        afterRegistrationSwitchToLogin();
+                        setView("login");
+                        updateUnsignedMessage();
                         setStatus("Registration complete. Sign the challenge and log in.", "good");
                     } catch (error) {
                         setStatus(`Registration failed: ${error.message}", "bad");
