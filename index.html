@@ -420,10 +420,18 @@
 
                 /* ── Challenge Generation ──────────────────────────── */
                 function updateUnsignedMessage() {
-                    const username = document.getElementById("loginUsername").value.trim();
+                    var loginInput = document.getElementById("loginUsername");
+                    var unsignedMsg = document.getElementById("unsignedMessage");
+                    if (!loginInput || !unsignedMsg) {
+                        console.warn("PGP login: missing loginUsername or unsignedMessage element");
+                        return;
+                    }
+                    const username = loginInput.value.trim();
                     const ts = Math.floor(Date.now() / 1000);
                     const value = `LOGIN:${username || "username"}:${ts}`;
-                    document.getElementById("unsignedMessage").value = value;
+                    unsignedMsg.value = value;
+                    // Debug log
+                    console.log("PGP Challenge generated:", value);
                 }
 
                 /* ── Chat Helpers ──────────────────────────────────── */
