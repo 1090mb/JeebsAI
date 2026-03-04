@@ -179,10 +179,10 @@ All of the above commands should return:
 ## Summary
 
 All fixes have been applied to:
-- ✅ `src/main.rs` - Removed duplicate registration
-- ✅ `src/cortex.rs` - Reorganized struct definitions
-- ✅ `src/deep_learning.rs` - Added UUID import
-- ✅ `src/lib.rs` - Modules properly exported
-- ✅ `src/main.rs` - All endpoints registered
+- ✅ `main.rs` - Removed duplicate registration
+- ✅ `cortex.rs` - Reorganized struct definitions
+- ✅ `deep_learning.rs` - Added UUID import
+- ✅ `lib.rs` - Modules properly exported
+- ✅ `main.rs` - All endpoints registered
 
 **The chat 405 error should now be completely fixed.** 🎉

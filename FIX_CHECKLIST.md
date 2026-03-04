@@ -68,10 +68,10 @@ curl -X POST http://localhost:8080/api/jeebs \
 
 | File | What Changed |
 |------|--------------|
-| `src/cortex.rs` | Added Cortex struct + implementation |
-| `src/main.rs` | Removed duplicate |
-| `src/cortex.rs` | Reordered structs |
-| `src/deep_learning.rs` | Added import |
+| `cortex.rs` | Added Cortex struct + implementation |
+| `main.rs` | Removed duplicate |
+| `cortex.rs` | Reordered structs |
+| `deep_learning.rs` | Added import |
 
 ---
 

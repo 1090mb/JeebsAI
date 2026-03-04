@@ -1,6 +1,6 @@
 #!/bin/bash
 # 1. Capture the path from the source code
-REAL_PATH=$(grep -B 3 "pub async fn login" src/auth/mod.rs | grep -oP 'post\("\K[^"]+')
+REAL_PATH=$(grep -B 3 "pub async fn login" auth_mod.rs | grep -oP 'post\("\K[^"]+')
 
 if [ -z "$REAL_PATH" ]; then
     echo "❌ Could not auto-detect path. Please check Step 1 output."

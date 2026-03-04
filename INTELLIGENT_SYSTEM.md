@@ -6,7 +6,7 @@ JeebsAI has been enhanced with a comprehensive intelligent inference and continu
 
 ## System Architecture
 
-### 1. Intelligent Inference Engine (`src/intelligent_inference.rs`)
+### 1. Intelligent Inference Engine (`intelligent_inference.rs`)
 
 **Purpose**: Provides context-aware reasoning by retrieving and reasoning over brain data.
 
@@ -54,7 +54,7 @@ Generate Response:
 Return Response with Confidence, Sources, Learned Concepts
 ```
 
-### 2. Model Context Protocol (MCP) Server (`src/mcp_server.rs` & `src/mcp_api.rs`)
+### 2. Model Context Protocol (MCP) Server (`mcp_server.rs` & `mcp_api.rs`)
 
 **Purpose**: Provides Claude and other LLMs structured access to JeebsAI's brain.
 
@@ -89,7 +89,7 @@ Server returns:
 Claude provides informed response with citations
 ```
 
-### 3. Continuous Learning Engine (`src/continuous_learning.rs`)
+### 3. Continuous Learning Engine (`continuous_learning.rs`)
 
 **Purpose**: Automatically learns from successful interactions and consolidates new knowledge.
 

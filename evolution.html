@@ -1,229 +1,547 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeebs Evolution</title>
-    <style>
-        :root {
-            --bg-main: #1a1a1a;
-            --bg-card: #2a2a2a;
-            --text-main: #eee;
-            --border: #444;
-            --accent: #2e7d32;
-        }
-        body.light-mode {
-            --bg-main: #f4f4f9;
-            --bg-card: #ffffff;
-            --text-main: #333;
-            --border: #ccc;
-            --accent: #4caf50;
-        }
-        body { font-family: sans-serif; background: var(--bg-main); color: var(--text-main); padding: 20px; transition: background 0.3s, color 0.3s; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .theme-toggle { background: transparent; border: 1px solid var(--border); color: var(--text-main); padding: 5px 10px; cursor: pointer; border-radius: 4px; }
-        .update-card { background: var(--bg-card); border: 1px solid var(--border); padding: 15px; margin-bottom: 15px; border-radius: 5px; }
-        .update-header { display: flex; justify-content: space-between; align-items: center; }
-        .status { padding: 3px 8px; border-radius: 3px; font-size: 0.8em; text-transform: uppercase; }
-        .status.pending { background: #d4a017; color: #000; }
-        .status.applied { background: #2e7d32; color: #fff; }
-        .status.denied { background: #c62828; color: #fff; }
-        .status.rolled_back { background: #555; color: #fff; }
-        .status.resolved { background: #607d8b; color: #fff; }
-        .severity { padding: 3px 8px; border-radius: 3px; font-size: 0.8em; margin-right: 5px; text-transform: uppercase; font-weight: bold; }
-        .severity.low { background: #1b5e20; color: #a5d6a7; border: 1px solid #2e7d32; }
-        .severity.medium { background: #e65100; color: #ffcc80; border: 1px solid #ef6c00; }
-        .severity.high { background: #b71c1c; color: #ef9a9a; border: 1px solid #c62828; }
-        pre { background: #000; padding: 10px; overflow-x: auto; }
-        button { cursor: pointer; padding: 5px 10px; margin-right: 5px; border: none; border-radius: 3px; }
-        .btn-apply { background: #2e7d32; color: white; }
-        .btn-deny { background: #c62828; color: white; }
-        .btn-resolve { background: #607d8b; color: white; }
-        .btn-rollback { background: #f57c00; color: white; }
-        .notification-banner { background: #b71c1c; color: white; padding: 10px; margin-bottom: 15px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; animation: flash 2s infinite alternate; }
-        @keyframes flash { from { border: 1px solid #b71c1c; } to { border: 1px solid #ff5252; box-shadow: 0 0 10px #ff5252; } }
-        select { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border); padding: 5px; border-radius: 3px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Evolution Dashboard - JeebsAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .live-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--good);
+      display: inline-block
+    }
+
+    .live-dot.off {
+      background: var(--muted)
+    }
+
+    .live-dot:not(.off) {
+      animation: pulse-ring 2s ease-out infinite
+    }
+
+    @keyframes pulse-ring {
+      0% {
+        box-shadow: 0 0 0 0 rgba(74, 222, 128, .5)
+      }
+
+      70% {
+        box-shadow: 0 0 0 8px transparent
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 transparent
+      }
+    }
+
+    .severity {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: 600;
+      text-transform: uppercase
+    }
+
+    .severity.high {
+      background: rgba(248, 113, 113, .15);
+      color: #f87171
+    }
+
+    .severity.medium {
+      background: rgba(251, 191, 36, .15);
+      color: #fbbf24
+    }
+
+    .severity.low {
+      background: rgba(74, 222, 128, .15);
+      color: #4ade80
+    }
+
+    .status {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      font-weight: 600
+    }
+
+    .status.pending {
+      background: rgba(96, 165, 250, .12);
+      color: #60a5fa
+    }
+
+    .status.applied {
+      background: rgba(74, 222, 128, .12);
+      color: #4ade80
+    }
+
+    .status.denied {
+      background: rgba(248, 113, 113, .12);
+      color: #f87171
+    }
+
+    .update-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px
+    }
+
+    .session-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .session-row:last-child {
+      border-bottom: none
+    }
+
+    /* Proposal Cards */
+    .proposal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .proposal-card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      transition: transform 0.2s, border-color 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .proposal-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+
+    .proposal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .proposal-title {
+      font-weight: 700;
+      font-size: 1.05em;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .proposal-desc {
+      font-size: 0.9em;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      line-height: 1.5;
+      flex: 1;
+    }
+
+    .proposal-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85em;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      margin-top: auto;
+    }
+
+    .status-badge {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.8em;
+      text-transform: uppercase;
+    }
+
+    .proposal-details {
+      margin-top: 12px;
+      font-size: 0.85em;
+      border-top: 1px dashed var(--border);
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .proposal-section-title {
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .proposal-list {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--text);
+    }
+
+    .proposal-list li {
+      margin-bottom: 3px;
+    }
+
+    .proposal-code {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      background: var(--bg-0);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      color: var(--accent);
+    }
+
+    .view-changes-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.85em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .view-changes-btn:hover {
+      background: var(--bg-0);
+      color: var(--text);
+    }
+  </style>
 </head>
+
 <body>
-    <div class="header">
-        <h1>Evolution Proposals</h1>
-        <button class="theme-toggle" onclick="toggleTheme()">🌓 Theme</button>
+  <div id="app-layout">
+  <aside id="sidebar-container"></aside>
+  <main class="main-content">
+  <div class="shell" style="max-width:1000px">
+    <div class="card card-glow" style="margin-bottom:24px;text-align:center">
+      <h1 style="margin-bottom:8px">Evolution Dashboard</h1>
+      <p class="text-muted">Brain metrics, autonomous thinking, and real-time learning feed.</p>
+      <div id="auth-debug-banner" style="margin-top:8px"></div>
     </div>
-    <div id="notifications-area"></div>
-    <div style="margin-bottom: 15px;">
-        <label for="statusFilter">Filter:</label>
-        <select id="statusFilter" onchange="renderUpdates()">
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="applied">Applied</option>
-            <option value="denied">Denied</option>
-            <option value="resolved">Resolved</option>
-            <option value="rolled_back">Rolled Back</option>
+
+    <!-- Metrics -->
+    <div class="metrics-grid" style="margin-bottom:24px">
+      <div class="metric-card">
+        <div id="m-brain-nodes" class="metric-value">-</div>
+        <div class="metric-label">Brain Nodes</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-learned-facts" class="metric-value">-</div>
+        <div class="metric-label">Learned Facts</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-chats-24h" class="metric-value">-</div>
+        <div class="metric-label">Chats (24h)</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-proposals" class="metric-value">-</div>
+        <div class="metric-label">Proposals</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-cycles" class="metric-value">-</div>
+        <div class="metric-label">Think Cycles</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-unanswered" class="metric-value">-</div>
+        <div class="metric-label">Unanswered</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-warnings" class="metric-value">-</div>
+        <div class="metric-label">Warnings</div>
+      </div>
+      <div class="metric-card">
+        <div id="m-errors" class="metric-value">-</div>
+        <div class="metric-label">Errors</div>
+      </div>
+    </div>
+
+    <!-- Thinker & Topics -->
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-bottom:24px">
+      <div class="card card-glow">
+        <h3>Autonomous Thinker</h3>
+        <div class="data-list">
+          <div class="data-list-item"><span>Status</span><span class="row" style="gap:6px"><span id="thinker-dot"
+                class="live-dot off"></span><span id="thinker-status">UNKNOWN</span></span></div>
+          <div class="data-list-item"><span>Knowledge Drive</span><span id="thinker-drive"
+              style="font-weight:700">0%</span></div>
+        </div>
+        <div class="progress" id="drive-bar" style="margin:8px 0">
+          <div class="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="data-list">
+          <div class="data-list-item"><span>Last Cycle</span><span id="thinker-last-cycle" class="text-muted">n/a</span>
+          </div>
+          <div class="data-list-item"><span>Last Reason</span><span id="thinker-reason" class="text-muted">n/a</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Unknown Topics</h3>
+        <div id="unknown-topics" class="scroll-box" style="max-height:200px"><span class="text-muted">Loading...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Autonomous Learning Live Feed -->
+    <div class="card card-glow" style="margin-bottom:24px">
+      <h3>🧠 JeebsAI Live Feed</h3>
+      <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:0.95em">Show:</label>
+        <select id="feedTypeFilter" class="form-input" style="width:auto" onchange="renderUnifiedFeed()">
+          <option value="all">All</option>
+          <option value="learning">Learning</option>
+          <option value="thinking">Thinking</option>
+          <option value="search">Web Search</option>
         </select>
+        <input id="feedSearch" class="form-input" style="width:180px" placeholder="Search feed..." oninput="renderUnifiedFeed()" />
+        <button class="btn btn-ghost btn-sm" onclick="refreshUnifiedFeed()">Refresh</button>
+        <button class="btn btn-primary btn-sm" onclick="triggerResearch()">Start Research</button>
+      </div>
+      <div id="unified-live-feed" class="scroll-box" style="max-height:400px;overflow-y:auto;background:var(--bg-1);border:1px solid var(--border);padding:8px 12px;font-size:0.98em">
+        <span class="text-muted">Waiting for activity...</span>
+      </div>
     </div>
-    <div id="updates-list">Loading...</div>
 
-    <script>
-        let allUpdates = [];
-        let userRole = '';
+    <!-- Active Sessions -->
+    <div class="card" style="margin-top:24px">
+      <h3>Active Sessions</h3>
+      <div id="active-sessions" class="scroll-box" style="max-height:250px"><span class="text-muted">Loading
+          sessions...</span></div>
+    </div>
+  </div>
 
-        // Theme Init
-        if (localStorage.getItem('theme') === 'light') document.body.classList.add('light-mode');
-        function toggleTheme() {
-            document.body.classList.toggle('light-mode');
-            localStorage.setItem('theme', document.body.classList.contains('light-mode') ? 'light' : 'dark');
+  <script src="auth.js"></script>
+  <script src="nav.js"></script>
+  <script>
+    // Unified JeebsAI Live Feed logic
+    let unifiedFeedEvents = [];
+    async function refreshUnifiedFeed() {
+      const el = document.getElementById('unified-live-feed');
+      if (!el) return;
+      try {
+        const res = await fetch('/api/logs/unified-feed');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.events) && data.events.length > 0) {
+          unifiedFeedEvents = data.events;
+          renderUnifiedFeed();
+        } else {
+          el.innerHTML = '<span class="text-muted">No recent activity.</span>';
         }
-
-        async function loadUpdates() {
-            const res = await fetch('/api/admin/evolution/updates');
-            if (!res.ok) {
-                document.getElementById('updates-list').innerText = 'Access Denied. You do not have permission to view this page.';
-                return;
-            }
+      } catch (e) {
+        el.innerHTML = '<span class="text-danger">Error loading live feed.</span>';
+      }
+    }
+    async function triggerResearch() {
+      if (!confirm("Start a new autonomous internet research session?")) return;
+      try {
+        const res = await safeFetch("/api/admin/training/run/full", { 
+            method: "POST", 
+            credentials: "same-origin", 
+            headers: authHeaders() 
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert("Research session started! Check the live feed.");
+            refreshUnifiedFeed();
+        } else {
+            alert("Failed to start research: " + (data.error || "Unknown error"));
+        }
+      } catch (e) {
+        alert("Error triggering research: " + e.message);
+      }
+    }
+    function renderUnifiedFeed() {
+      const el = document.getElementById('unified-live-feed');
+      if (!el) return;
+      let events = unifiedFeedEvents;
+      const type = document.getElementById('feedTypeFilter').value;
+      const search = document.getElementById('feedSearch').value.toLowerCase();
+      if (type !== 'all') events = events.filter(ev => ev.type === type);
+      if (search) events = events.filter(ev => (ev.message||'').toLowerCase().includes(search) || (ev.summary||'').toLowerCase().includes(search));
+      if (!events.length) {
+        el.innerHTML = '<span class="text-muted">No matching activity.</span>';
+        return;
+      }
+      el.innerHTML = events.map(ev => `<div style='margin-bottom:6px' title='${ev.type.charAt(0).toUpperCase()+ev.type.slice(1)} event'><b>${ev.time||''}</b> <span style='font-size:0.95em;color:#888'>[${ev.type}]</span> — <span title='${ev.summary||''}'>${ev.message}</span></div>`).join('');
+    }
+    setInterval(refreshUnifiedFeed, 2000);
+    refreshUnifiedFeed();
+  </script>
+      <!-- Current Status Panel -->
+      <div class="card card-glow" style="margin-bottom:24px">
+        <h3>🔎 JeebsAI Current Status</h3>
+        <div id="jeebs-status-panel" style="font-size:1.08em;line-height:1.5;padding:8px 0">
+          <span class="text-muted">Loading current status...</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="refreshJeebsStatus()">Refresh</button>
+      </div>
+      <script>
+        async function refreshJeebsStatus() {
+          const el = document.getElementById('jeebs-status-panel');
+          if (!el) return;
+          try {
+            const res = await fetch('/api/brain/current-status');
             const data = await res.json();
-            allUpdates = data.updates;
-            userRole = data.role;
-            loadNotifications();
-            renderUpdates();
-        }
-
-        function renderUpdates() {
-            const filter = document.getElementById('statusFilter').value;
-            const updates = filter === 'all' ? allUpdates : allUpdates.filter(u => u.status === filter);
-            const container = document.getElementById('updates-list');
-            container.innerHTML = '';
-
-            if (updates.length === 0) {
-                container.innerHTML = '<p>No updates found.</p>';
-                return;
+            if (data.success && data.status) {
+              el.innerHTML = `<b>Now:</b> ${data.status.now}<br><b>Next:</b> ${data.status.next}<br><b>Summary:</b> <span title='${data.status.detail||''}'>${data.status.summary}</span>`;
+            } else {
+              el.innerHTML = '<span class="text-muted">No current status available.</span>';
             }
+          } catch (e) {
+            el.innerHTML = '<span class="text-danger">Error loading status.</span>';
+          }
+        }
+        setInterval(refreshJeebsStatus, 10000);
+        refreshJeebsStatus();
+      </script>
+  <script>
+    JeebsNav.init("evolution");
 
-            updates.forEach(u => {
-                const card = document.createElement('div');
-                card.className = 'update-card';
-                
-                let actions = '';
-                if (userRole === 'admin') {
-                    if (u.status === 'pending') {
-                        actions = `
-                            <button class="btn-apply" onclick="applyUpdate('${u.id}')">Apply</button>
-                            <button class="btn-deny" onclick="denyUpdate('${u.id}')">Deny</button>
-                            <button class="btn-resolve" onclick="resolveUpdate('${u.id}')">Resolve</button>
-                        `;
-                    } else if (u.status === 'applied') {
-                        actions = `<button class="btn-rollback" onclick="rollbackUpdate('${u.id}')">Rollback</button>`;
-                    }
-                }
+    async function init() {
+      await requireAuth("admin");
+      fullRefresh();
+    }
 
-                let changesHtml = u.changes.map(c => `<div><strong>${c.path}</strong><pre>${escapeHtml(c.new_content)}</pre></div>`).join('');
+    async function fullRefresh() {
+      loadStats();
+      loadLearningSessions();
+    }
 
-                const severityClass = u.severity ? u.severity.toLowerCase() : 'low';
-                const severityLabel = u.severity || 'Low';
-                
-                let commentsHtml = u.comments && u.comments.length > 0 
-                    ? u.comments.map(c => `<div style="background:#333; padding:5px; margin:2px 0; font-size:0.9em; border-radius:3px;"><strong>${escapeHtml(c.author)}</strong>: ${escapeHtml(c.content)}</div>`).join('')
-                    : '<div style="color:#777; font-style:italic; font-size:0.9em;">No comments yet.</div>';
+    async function loadStats() {
+      try {
+        const res = await safeFetch("/api/evolution/stats", { credentials: "same-origin", headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
 
-                let commentForm = `
-                    <div style="margin-top:10px; border-top:1px solid #444; padding-top:10px;">
-                        <div style="margin-bottom:5px;">${commentsHtml}</div>
-                        <div style="display:flex;">
-                            <input type="text" id="comment-input-${u.id}" placeholder="Add a comment..." style="flex-grow:1; padding:5px; background:#222; border:1px solid #555; color:#eee; margin-right:5px; border-radius:3px;">
-                            <button onclick="addComment('${u.id}')" style="background:#0277bd; color:white;">Post</button>
-                        </div>
-                    </div>
-                `;
+        // Update metrics
+        if (data.brain) {
+          document.getElementById("m-brain-nodes").textContent = data.brain.nodes || 0;
+          document.getElementById("m-learned-facts").textContent = data.brain.learned_facts || 0;
+          document.getElementById("m-chats-24h").textContent = data.brain.chat_logs_24h || 0;
+          document.getElementById("m-unanswered").textContent = data.brain.unanswered_24h || 0;
+          document.getElementById("m-warnings").textContent = data.brain.warnings_24h || 0;
+          document.getElementById("m-errors").textContent = data.brain.errors_24h || 0;
 
-                card.innerHTML = `
-                    <div class="update-header">
-                        <h2>${escapeHtml(u.title)}</h2>
-                        <div>
-                            <span class="severity ${severityClass}">${severityLabel}</span>
-                            <span class="status ${u.status}">${u.status}</span>
-                        </div>
-                    </div>
-                    <div style="font-size: 0.9em; color: #aaa; margin-bottom: 5px;">Author: ${escapeHtml(u.author)}</div>
-                    <p>${escapeHtml(u.description)}</p>
-                    <small>${new Date(u.created_at).toLocaleString()}</small>
-                    <details>
-                        <summary>View Changes</summary>
-                        ${changesHtml}
-                    </details>
-                    ${commentForm}
-                    <div style="margin-top: 10px;">${actions}</div>
-                `;
-                container.appendChild(card);
-            });
+          // Update Thinker Drive
+          const drivePct = Math.round((data.brain.knowledge_drive || 0) * 100);
+          document.getElementById("thinker-drive").textContent = `${drivePct}%`;
+          document.querySelector("#drive-bar .progress-fill").style.width = `${drivePct}%`;
+
+          // Update Unknown Topics
+          const topicsBox = document.getElementById("unknown-topics");
+          if (data.brain.top_unknown_topics && data.brain.top_unknown_topics.length > 0) {
+            topicsBox.innerHTML = '<ul style="margin:0;padding-left:20px">' +
+              data.brain.top_unknown_topics.map(t => `<li style="margin-bottom:4px">${escapeHtml(t.topic)} <span class="text-muted">(${t.count} asks)</span></li>`).join('') +
+              '</ul>';
+          } else {
+            topicsBox.innerHTML = '<span class="text-muted">No unknown topics detected recently.</span>';
+          }
         }
 
-        async function loadNotifications() {
-            if (userRole !== 'admin') return;
-            const res = await fetch('/api/admin/notifications');
-            if (res.ok) {
-                const notifs = await res.json();
-                const area = document.getElementById('notifications-area');
-                area.innerHTML = notifs.map(n => `
-                    <div class="notification-banner">
-                        <span><strong>ALERT:</strong> ${escapeHtml(n.message)}</span>
-                        <button onclick="dismissNotification('${n.id}')" style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.5);">Dismiss</button>
-                    </div>
-                `).join('');
-            }
+        // Update Proposals Metric
+        if (data.proposals) {
+          document.getElementById("m-proposals").textContent = data.proposals.total || 0;
         }
 
-        async function dismissNotification(id) {
-            await fetch(`/api/admin/notification/${id}`, { method: 'DELETE' });
-            loadNotifications();
+        // Update Thinker Status
+        if (data.thinker) {
+          document.getElementById("m-cycles").textContent = data.thinker.total_cycles || 0;
+          document.getElementById("thinker-status").textContent = (data.thinker.status || "UNKNOWN").toUpperCase();
+
+          const dot = document.getElementById("thinker-dot");
+          if (data.thinker.status === "running") {
+            dot.className = "live-dot";
+          } else {
+            dot.className = "live-dot off";
+          }
+
+          if (data.thinker.last_cycle_at) {
+            document.getElementById("thinker-last-cycle").textContent = new Date(data.thinker.last_cycle_at).toLocaleString();
+          }
+          if (data.thinker.last_reason) {
+            document.getElementById("thinker-reason").textContent = data.thinker.last_reason;
+          }
         }
 
-        async function applyUpdate(id) {
-            if (!confirm('Apply this update?')) return;
-            await fetch(`/api/admin/evolution/apply/${id}`, { method: 'POST' });
-            loadUpdates();
-        }
+      } catch (e) {
+        console.warn("Failed to load evolution stats", e);
+      }
+    }
 
-        async function denyUpdate(id) {
-            if (!confirm('Deny this update?')) return;
-            await fetch(`/api/admin/evolution/deny/${id}`, { method: 'POST' });
-            loadUpdates();
+    async function loadLearningSessions() {
+      const container = document.getElementById("active-sessions");
+      try {
+        const res = await fetch("/api/brain/learning-sessions");
+        const data = await res.json();
+        if (data.success && data.sessions.length > 0) {
+          // Sort by last studied descending
+          const sessions = data.sessions.sort((a, b) => new Date(b.last_studied) - new Date(a.last_studied));
+          
+          container.innerHTML = sessions.map(s => `
+            <div class="session-row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+              <div style="flex:1">
+                <div style="font-weight:600">${escapeHtml(s.topic)}</div>
+                <div class="text-muted" style="font-size:0.85em">${s.learned_facts.length} facts • ${s.status}</div>
+              </div>
+              <div style="font-size:0.85em;text-align:right">
+                <div style="margin-bottom:4px">${new Date(s.last_studied).toLocaleTimeString()}</div>
+                <button class="btn btn-ghost btn-sm" onclick="viewSessionFacts('${s.id}')">View Facts</button>
+              </div>
+            </div>
+          `).join("");
+        } else {
+          container.innerHTML = '<div class="text-muted" style="padding:10px">No active learning sessions found.</div>';
         }
+      } catch (e) {
+        container.innerHTML = '<div class="text-danger">Error loading sessions.</div>';
+      }
+    }
 
-        async function resolveUpdate(id) {
-            if (!confirm('Mark this update as resolved (manual fix/ignored)?')) return;
-            await fetch(`/api/admin/evolution/resolve/${id}`, { method: 'POST' });
-            loadUpdates();
+    window.viewSessionFacts = async function(sessionId) {
+      const container = document.getElementById("active-sessions");
+      container.innerHTML = '<span class="text-muted">Loading facts...</span>';
+      try {
+        const res = await fetch(`/api/brain/learning-sessions/${sessionId}`);
+        const data = await res.json();
+        if(data.success) {
+            const s = data.session;
+            const factsHtml = s.learned_facts.map(f => `<li style="margin-bottom:8px;line-height:1.4">${escapeHtml(f.fact)} <div class="text-muted" style="font-size:0.8em;margin-top:2px">Source: ${escapeHtml(f.source)}</div></li>`).join("");
+            container.innerHTML = `
+                <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);padding-bottom:8px">
+                    <button class="btn btn-ghost btn-sm" onclick="loadLearningSessions()">← Back</button>
+                    <strong>${escapeHtml(s.topic)}</strong>
+                </div>
+                <ul style="padding-left:20px;margin:0;max-height:300px;overflow-y:auto">${factsHtml || '<li class="text-muted">No facts recorded yet.</li>'}</ul>
+            `;
         }
+      } catch(e) { loadLearningSessions(); }
+    };
 
-        async function rollbackUpdate(id) {
-            if (!confirm('Rollback this update?')) return;
-            await fetch(`/api/admin/evolution/rollback/${id}`, { method: 'POST' });
-            loadUpdates();
-        }
-        
-        async function addComment(id) {
-            const input = document.getElementById(`comment-input-${id}`);
-            const content = input.value;
-            if (!content) return;
-            
-            await fetch(`/api/admin/evolution/comment/${id}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content })
-            });
-            loadUpdates();
-        }
+    function escapeHtml(s) { if (!s) return ""; return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-        function escapeHtml(text) {
-            if (!text) return '';
-            return text.replace(/&/g, "&amp;")
-                       .replace(/</g, "&lt;")
-                       .replace(/>/g, "&gt;")
-                       .replace(/"/g, "&quot;")
-                       .replace(/'/g, "&#039;");
-        }
-
-        loadUpdates();
-    </script>
+    init();
+  </script>
+  </main>
+  </div>
+  <script src="evolution.js"></script>
 </body>
+
 </html>

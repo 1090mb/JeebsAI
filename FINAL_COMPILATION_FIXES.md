@@ -39,9 +39,9 @@ let response = crate::cortex::Cortex::think(message, &data)
 ### 4. Additional duplicate `.await;` (fixed with above)
 
 ## Files Modified
-- ✅ src/user_chat.rs
-- ✅ src/cortex.rs
-- ✅ src/brain_parser.rs
+- ✅ user_chat.rs
+- ✅ cortex.rs
+- ✅ brain_parser.rs
 
 ## Final Status
 

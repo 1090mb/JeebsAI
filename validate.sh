@@ -69,19 +69,19 @@ fi
 header "WebUI File Integrity"
 
 REQUIRED_FILES=(
-    "webui/auth.js"
-    "webui/index.html"
-    "webui/admin_dashboard.html"
-    "webui/admin_blacklist.html"
-    "webui/admin_whitelist.html"
-    "webui/trainer_panel.html"
-    "webui/evolution.html"
-    "webui/logs.html"
-    "webui/profile.html"
-    "webui/search.html"
-    "webui/status.html"
-    "webui/visualize.html"
-    "webui/logic_visualize.html"
+    "auth.js"
+    "index.html"
+    "admin_dashboard.html"
+    "admin_blacklist.html"
+    "admin_whitelist.html"
+    "trainer_panel.html"
+    "evolution.html"
+    "logs.html"
+    "profile.html"
+    "search.html"
+    "status.html"
+    "visualize.html"
+    "logic_visualize.html"
 )
 
 for f in "${REQUIRED_FILES[@]}"; do
@@ -101,7 +101,7 @@ done
 # ============================================================================
 header "HTML Structure"
 
-for f in webui/*.html; do
+for f in *.html; do
     fname=$(basename "$f")
 
     # Check for <!doctype> or <!DOCTYPE>
@@ -145,7 +145,7 @@ header "auth.js Integration"
 
 # Verify auth.js exports required functions
 for fn in safeFetch authHeaders requireAuth getAuthState jeebsGetToken jeebsSetToken jeebsClearToken logout startAuthGuard startSessionPing; do
-    if grep -q "function $fn" webui/auth.js; then
+    if grep -q "function $fn" auth.js; then
         pass "auth.js exports $fn()"
     else
         fail "auth.js missing function: $fn()"
@@ -153,9 +153,9 @@ for fn in safeFetch authHeaders requireAuth getAuthState jeebsGetToken jeebsSetT
 done
 
 # Verify all HTML pages include auth.js
-for f in webui/*.html; do
+for f in *.html; do
     fname=$(basename "$f")
-    if grep -q 'src="/webui/auth.js"' "$f" || grep -q "src='/webui/auth.js'" "$f"; then
+    if grep -q 'src="/auth.js"' "$f" || grep -q "src='/auth.js'" "$f"; then
         pass "$fname includes auth.js"
     else
         fail "$fname does NOT include auth.js"
@@ -163,7 +163,7 @@ for f in webui/*.html; do
 done
 
 # Check for pages that still use raw fetch() instead of safeFetch()
-for f in webui/*.html; do
+for f in *.html; do
     fname=$(basename "$f")
     raw_count=$(grep -c 'await fetch(' "$f" 2>/dev/null || true)
     raw_count=$(echo "$raw_count" | tr -d '[:space:]')
@@ -173,7 +173,7 @@ for f in webui/*.html; do
 done
 
 # Check for inline TOKEN_KEY / ROOT_ADMIN constants (should use auth.js shared constants)
-for f in webui/*.html; do
+for f in *.html; do
     fname=$(basename "$f")
     if [ "$fname" = "index.html" ]; then continue; fi  # index.html is special (login page)
     if grep -q 'const TOKEN_KEY\b' "$f" 2>/dev/null; then
@@ -189,7 +189,7 @@ header "Admin Page Auth Guards"
 ADMIN_PAGES=("admin_dashboard.html" "admin_blacklist.html" "admin_whitelist.html" "evolution.html" "logs.html")
 
 for page in "${ADMIN_PAGES[@]}"; do
-    f="webui/$page"
+    f="$page"
     if [ ! -f "$f" ]; then continue; fi
     if grep -q 'requireAuth("admin")' "$f"; then
         pass "$page has requireAuth(\"admin\") guard"
@@ -198,7 +198,7 @@ for page in "${ADMIN_PAGES[@]}"; do
     fi
 done
 
-if grep -q 'requireAuth("trainer")' webui/trainer_panel.html 2>/dev/null; then
+if grep -q 'requireAuth("trainer")' trainer_panel.html 2>/dev/null; then
     pass "trainer_panel.html has requireAuth(\"trainer\") guard"
 else
     fail "trainer_panel.html MISSING requireAuth(\"trainer\") guard"
@@ -209,9 +209,9 @@ fi
 # ============================================================================
 header "Rate Limiter Config"
 
-if [ -f "src/main.rs" ]; then
-    per_sec=$(grep -oE 'per_second\([0-9]+' src/main.rs | grep -oE '[0-9]+' || echo "?")
-    burst=$(grep -oE 'burst_size\([0-9]+' src/main.rs | grep -oE '[0-9]+' || echo "?")
+if [ -f "main.rs" ]; then
+    per_sec=$(grep -oE 'per_second\([0-9]+' main.rs | grep -oE '[0-9]+' || echo "?")
+    burst=$(grep -oE 'burst_size\([0-9]+' main.rs | grep -oE '[0-9]+' || echo "?")
 
     if [ -n "$per_sec" ] && [ "$per_sec" != "?" ]; then
         if [ "$per_sec" -ge 5 ]; then
@@ -294,19 +294,19 @@ if [ "$LIVE_MODE" = true ]; then
 
         # Static files
         STATIC_PAGES=(
-            "/webui/index.html"
-            "/webui/auth.js"
-            "/webui/admin_dashboard.html"
-            "/webui/admin_blacklist.html"
-            "/webui/admin_whitelist.html"
-            "/webui/trainer_panel.html"
-            "/webui/evolution.html"
-            "/webui/logs.html"
-            "/webui/profile.html"
-            "/webui/search.html"
-            "/webui/status.html"
-            "/webui/visualize.html"
-            "/webui/logic_visualize.html"
+            "/index.html"
+            "/auth.js"
+            "/admin_dashboard.html"
+            "/admin_blacklist.html"
+            "/admin_whitelist.html"
+            "/trainer_panel.html"
+            "/evolution.html"
+            "/logs.html"
+            "/profile.html"
+            "/search.html"
+            "/status.html"
+            "/visualize.html"
+            "/logic_visualize.html"
         )
 
         for page in "${STATIC_PAGES[@]}"; do

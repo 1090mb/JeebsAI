@@ -288,20 +288,21 @@
 
 After stabilization is validated:
 
-1. **Priority 3**: User Personalization (src/user_personality.rs)
-   - Profile preferences storage
-   - Learning style detection
-   - Personalized response adaptation
 
-2. **Priority 4**: Coreference Resolution (src/coreference_resolver.rs)
-   - Pronoun handling ("it", "that", "they")
-   - Entity tracking across turns
-   - Ambiguity resolution
+1. **Priority 3**: User Personalization (user_personality.rs)
+  - Profile preferences storage
+  - Learning style detection
+  - Personalized response adaptation
 
-3. **Priority 5**: Response Validation (src/response_validator.rs)
-   - Fact accuracy checking
-   - Confidence scoring
-   - Inconsistency detection
+2. **Priority 4**: Coreference Resolution (coreference_resolver.rs)
+  - Pronoun handling ("it", "that", "they")
+  - Entity tracking across turns
+  - Ambiguity resolution
+
+3. **Priority 5**: Response Validation (response_validator.rs)
+  - Fact accuracy checking
+  - Confidence scoring
+  - Inconsistency detection
 
 4. **Priority 6**: Contextual Follow-ups
    - Auto-generated follow-up suggestions

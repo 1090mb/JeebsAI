@@ -1,132 +1,90 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jeebs Admin - IP Blacklist</title>
-    <style>
-                /* Enhanced menu styles */
-                .menu-bar {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    background: #7fffd4;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-                    z-index: 1000;
-                    padding: 16px 0;
-                }
-                .menu-bar-inner {
-                    max-width: 800px;
-                    margin: 0 auto;
-                    display: flex;
-                    gap: 16px;
-                    justify-content: flex-end;
-                }
-                .menu-link {
-                    padding: 12px 24px;
-                    background: #181c24;
-                    color: #7fffd4;
-                    border-radius: 8px;
-                    font-size: 1.1rem;
-                    font-weight: bold;
-                    text-decoration: none;
-                    border: 2px solid #7fffd4;
-                    transition: background 0.2s, color 0.2s, border-color 0.2s;
-                }
-                .menu-link:hover {
-                    background: #23283a;
-                    color: #fff;
-                    border-color: #fff;
-                }
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background: #f4f4f4; }
-        h1 { color: #333; }
-        .input-group { margin-bottom: 2rem; display: flex; gap: 10px; }
-        input { flex-grow: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 20px; font-size: 16px; background: #d9534f; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button.add { background: #0275d8; }
-        button:hover { opacity: 0.9; }
-        ul { list-style: none; padding: 0; }
-        li { background: white; padding: 1rem; margin-bottom: 0.5rem; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .error { color: red; margin-bottom: 1rem; }
-    </style>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const isAdmin = localStorage.getItem('jeebs_is_admin') === 'true';
+      if (!isAdmin) {
+        document.body.innerHTML = '';
+        window.location.replace('index.html#login');
+      }
+    });
+    </script>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>IP Blacklist — JeebsAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/webui/style.css"/>
 </head>
 <body>
-        <div class="menu-bar">
-            <div class="menu-bar-inner">
-                <a href="/admin_dashboard.html" class="menu-link">Dashboard</a>
-                <a href="/admin_whitelist.html" class="menu-link">Whitelist</a>
-                <a href="/admin_blacklist.html" class="menu-link">Blacklist</a>
-            </div>
-        </div>
-        <div style="height:64px;"></div> <!-- Spacer for fixed menu -->
-    <h1>IP Blacklist Management</h1>
-    
-    <div class="input-group">
-        <input type="text" id="ipInput" placeholder="Enter IP address (e.g., 192.168.1.1)">
-        <button class="add" onclick="addIp()">Block IP</button>
+<div id="app-layout">
+  <aside id="sidebar-container"></aside>
+  <main class="main-content">
+<div class="shell" style="max-width:640px;padding-top:60px">
+  <h1 style="margin-bottom:4px">IP Blacklist</h1>
+  <p class="text-muted" style="margin-bottom:24px">Block IP addresses from accessing the system</p>
+
+  <div class="card card-glow">
+    <div id="status" class="text-muted" style="margin-bottom:8px;display:none"></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input id="ipInput" class="form-input" placeholder="Enter IP address (e.g. 192.168.1.100)" style="flex:1"/>
+      <button class="btn btn-danger" onclick="addIP()">Block IP</button>
     </div>
-    <div id="error" class="error"></div>
+    <div id="count" class="text-muted" style="margin-bottom:8px"></div>
+    <div id="ipList" class="data-list"><div class="text-muted" style="padding:20px;text-align:center">Loading&hellip;</div></div>
+  </div>
+</div>
 
-    <ul id="ipList"></ul>
+<script src="/webui/auth.js"></script>
+<script src="/webui/nav.js"></script>
+<script>
+JeebsNav.init('admin');
 
-    <script>
-        async function loadBlacklist() {
-            const res = await fetch('/api/admin/blacklist');
-            if (res.status === 401) {
-                document.body.innerHTML = '<h1>Unauthorized</h1><p>You must be logged in as admin.</p>';
-                return;
-            }
-            const ips = await res.json();
-            const list = document.getElementById('ipList');
-            list.innerHTML = '';
-            ips.forEach(ip => {
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <span>${ip}</span>
-                    <button onclick="removeIp('${ip}')">Unblock</button>
-                `;
-                list.appendChild(li);
-            });
-        }
+function escapeHtml(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
+function showStatus(msg,ok){var el=document.getElementById("status");el.textContent=msg;el.style.display="block";el.style.color=ok?"var(--accent)":"var(--danger)";setTimeout(function(){el.style.display="none"},3000);}
 
-        async function addIp() {
-            const input = document.getElementById('ipInput');
-            const ip = input.value.trim();
-            if (!ip) return;
+async function loadList(){
+  try{
+    var res=await safeFetch("/api/admin/blacklist",{credentials:"same-origin",headers:authHeaders()});
+    if(!res.ok){document.getElementById("ipList").innerHTML='<div class="text-muted" style="padding:20px;text-align:center">Failed to load</div>';return;}
+    var ips=await res.json();
+    document.getElementById("count").textContent=ips.length+" blocked IP"+(ips.length!==1?"s":"");
+    if(ips.length===0){document.getElementById("ipList").innerHTML='<div class="empty-state"><div class="empty-state-icon">&#x1F6E1;</div><div>No blocked IPs</div></div>';return;}
+    document.getElementById("ipList").innerHTML=ips.map(function(ip){
+      return '<div class="data-list-item"><span style="font-family:var(--font-mono)'+escapeHtml(ip)+'</span><button class="btn btn-danger btn-sm" onclick="removeIP(\''+escapeHtml(ip)+'\')">Remove</button></div>';
+    }).join("");
+  }catch(e){document.getElementById("ipList").innerHTML='<div class="text-muted" style="padding:20px;text-align:center">Connection error</div>';}
+}
 
-            const res = await fetch('/api/admin/blacklist', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip })
-            });
+async function addIP(){
+  var ip=document.getElementById("ipInput").value.trim();if(!ip)return;
+  var res=await safeFetch("/api/admin/blacklist",{method:"POST",credentials:"same-origin",headers:authHeaders(true),body:JSON.stringify({ip:ip})});
+  if(!res.ok){showStatus("Failed to add IP",false);return;}
+  document.getElementById("ipInput").value="";showStatus("Blocked "+ip,true);loadList();
+}
 
-            if (res.ok) {
-                input.value = '';
-                loadBlacklist();
-            } else {
-                const data = await res.json();
-                document.getElementById('error').innerText = data.error || 'Failed to add IP';
-            }
-        }
+async function removeIP(ip){
+  if(!confirm("Remove "+ip+" from blacklist?"))return;
+  var res=await safeFetch("/api/admin/blacklist",{method:"DELETE",credentials:"same-origin",headers:authHeaders(true),body:JSON.stringify({ip:ip})});
+  if(!res.ok){showStatus("Failed to remove IP",false);return;}
+  showStatus("Removed "+ip,true);loadList();
+}
 
-        async function removeIp(ip) {
-            if (!confirm(`Are you sure you want to unblock ${ip}?`)) return;
+document.getElementById("ipInput").addEventListener("keydown",function(e){if(e.key==="Enter")addIP();});
 
-            const res = await fetch('/api/admin/blacklist', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip })
-            });
-
-            if (res.ok) {
-                loadBlacklist();
-            } else {
-                alert('Failed to remove IP');
-            }
-        }
-
-        loadBlacklist();
-    </script>
+// Access: allow 1090mb, admin, or trainer
+(async function(){
+  var auth=await requireAuth("admin");
+  if(!auth||!(auth.username==="1090mb"||auth.is_admin||auth.is_trainer)){
+    document.body.innerHTML = '<div class="shell" style=""><h1>IP Blacklist</h1><div class="card" style="margin-top:32px"><span class="text-danger">Access denied. Only admin, trainer, or 1090mb allowed.</span></div></div>';
+    return;
+  }
+  startAuthGuard("admin");
+  loadList();
+})();
+</script>
+  </main>
+  </div>
 </body>
 </html>

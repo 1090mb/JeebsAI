@@ -3,7 +3,7 @@
 A lightweight web panel for trainer users to issue training commands to JeebsAI.
 
 ## Access
-- URL: `/webui/trainer_panel.html`
+- URL: `/trainer_panel.html`
 - Requires a logged-in account with role `trainer` (or root admin).
 
 ## Trainer Commands
@@ -19,7 +19,7 @@ A lightweight web panel for trainer users to issue training commands to JeebsAI.
 ## Quick Try
 1. Assign role `trainer` to a user (admin only).
 2. Log in as that user.
-3. Open `/webui/trainer_panel.html`.
+3. Open `/trainer_panel.html`.
 4. Set focus or toggle training.
 
 ## Notes

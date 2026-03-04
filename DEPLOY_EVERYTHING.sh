@@ -36,7 +36,7 @@ echo ""
 
 # Stage all files
 echo "[2/4] 📦 Staging files..."
-git add webui/admin_dashboard.html
+git add admin_dashboard.html
 git add pull_from_github.sh
 git add RUN_THIS_NOW.sh
 git add auto_deploy.sh
@@ -116,7 +116,7 @@ echo "  3. Pull and deploy:"
 echo "     bash pull_from_github.sh"
 echo ""
 echo "  4. Access the feature:"
-echo "     http://your-vps-ip/webui/admin_dashboard.html"
+echo "     http://your-vps-ip/admin_dashboard.html"
 echo ""
 echo "════════════════════════════════════════════════════════════"
 echo ""

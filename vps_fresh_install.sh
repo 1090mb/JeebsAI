@@ -260,7 +260,7 @@ echo ""
 info "Performing health check..."
 sleep 2
 
-if curl -f http://localhost:$APP_PORT/webui/index.html > /dev/null 2>&1; then
+if curl -f http://localhost:$APP_PORT/index.html > /dev/null 2>&1; then
     success "✅ Health check passed! JeebsAI is responding on port $APP_PORT"
 else
     warn "⚠️  Health check inconclusive. Service may still be starting up."

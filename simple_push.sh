@@ -2,7 +2,7 @@
 # SIMPLE GIT PUSH - Just the git commands, nothing fancy
 
 # Stage the files
-git add webui/admin_dashboard.html
+git add admin_dashboard.html
 git add pull_from_github.sh
 git add *.sh
 git add *.md
