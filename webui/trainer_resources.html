@@ -36,6 +36,7 @@
             // Ensure user is logged in and has Trainer privileges (includes Admin/Mod)
             await requireAuth('trainer');
             JeebsNav.init('resources');
+            renderProposals();
         });
     </script>
   </main>
