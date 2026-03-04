@@ -39,7 +39,7 @@
                                     <button type="button" id="generateChallengeBtn" class="btn-workflow" style="flex:1;">Generate</button>
                                     <button type="button" id="copyChallengeBtn" class="btn-copy-challenge" style="flex:1;">Copy</button>
                                 </div>
-                                <textarea id="unsignedMessage" readonly class="challenge-text" placeholder="Challenge will appear here..." style="margin-top:0.6rem;background:#1a2a44;color:#b0c4de;font-size:1.01rem;border-radius:7px;padding:0.7rem 0.8rem;min-height:2.2em;"></textarea>
+                                <textarea id="unsignedMessage" class="challenge-text" placeholder="Challenge will appear here..." style="margin-top:0.6rem;background:#1a2a44;color:#b0c4de;font-size:1.01rem;border-radius:7px;padding:0.7rem 0.8rem;min-height:2.2em;" autocomplete="off" spellcheck="false"></textarea>
                             </div>
                             <div class="workflow-step" style="margin-bottom:1.1rem;">
                                 <div class="step-label" style="font-weight:600;display:flex;align-items:center;gap:0.5rem;">
@@ -430,10 +430,21 @@
                     const ts = Math.floor(Date.now() / 1000);
                     const value = `LOGIN:${username || "username"}:${ts}`;
                     unsignedMsg.value = value;
-                    // Debug log
+                    unsignedMsg.textContent = value;
                     if (unsignedMsg.value !== value) {
-                        console.error("PGP Challenge not set!", value);
+                        unsignedMsg.value = value;
+                        unsignedMsg.textContent = value;
+                    }
+                    // Show error visually if still not set
+                    if (unsignedMsg.value !== value) {
+                        unsignedMsg.style.background = '#441a1a';
+                        unsignedMsg.style.color = '#fff';
+                        unsignedMsg.value = 'ERROR: Challenge not set!';
+                        unsignedMsg.textContent = 'ERROR: Challenge not set!';
+                        console.error("PGP Challenge not set after all attempts!", value);
                     } else {
+                        unsignedMsg.style.background = '#1a2a44';
+                        unsignedMsg.style.color = '#b0c4de';
                         console.log("PGP Challenge generated:", value);
                     }
                 }
