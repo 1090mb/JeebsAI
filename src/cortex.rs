@@ -422,6 +422,44 @@ impl Cortex {
             }
         };
 
+        // Calculate initial confidence
+        let initial_confidence = if facts.is_empty() { 0.3 } else { 0.7 };
+
+        // TRIGGER AUTO-SEARCH if confidence is low (non-blocking)
+        if initial_confidence < 0.5 {
+            let db = data.db.clone();
+            let client = reqwest::Client::new();
+            let search_query = input.to_string();
+            let context_str = format!("{:?}", intent);
+
+            tokio::spawn(async move {
+                if let Ok(timeout_result) = tokio::time::timeout(
+                    std::time::Duration::from_secs(10),
+                    crate::auto_search::auto_search_for_query(&db, &client, &search_query, &context_str, 0.4),
+                )
+                .await
+                {
+                    if let Ok(_results) = timeout_result {
+                        // Log the auto-search event (non-blocking)
+                        let _ = sqlx::query(
+                            "INSERT INTO brain_nodes (id, label, summary, data, created_at) VALUES (?, ?, ?, ?, ?)"
+                        )
+                            .bind(format!("auto_search_event:{}", uuid::Uuid::new_v4()))
+                            .bind("Auto-Search Event")
+                            .bind(format!("Auto-searched for: {}", search_query))
+                            .bind(serde_json::to_vec(&serde_json::json!({
+                                "type": "auto_search_event",
+                                "query": search_query,
+                                "timestamp": chrono::Local::now().to_rfc3339(),
+                            })).unwrap_or_default())
+                            .bind(chrono::Local::now().to_rfc3339())
+                            .execute(&db)
+                            .await;
+                    }
+                }
+            });
+        }
+
         if facts.is_empty() {
             // Smarter fallback responses based on intent
             return Self::generate_fallback_response(input, &intent.primary);

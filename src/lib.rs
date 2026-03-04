@@ -41,6 +41,7 @@ pub mod cdhsc_proposals;
 pub mod admin_dashboard;
 pub mod demo_data;
 pub mod utils;
+pub mod auto_search;
 
 // Re-export AppState for convenience
 pub use crate::state::AppState;
