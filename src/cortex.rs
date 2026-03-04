@@ -368,6 +368,11 @@ pub struct Cortex;
 
 impl Cortex {
     pub async fn think(input: &str, data: &web::Data<AppState>) -> String {
+        // EARLY EXIT: Detect and handle simple greetings immediately
+        if Self::is_simple_greeting(input) {
+            return Self::handle_greeting(input);
+        }
+
         // Search across all topics ("*") for relevant facts based on the input query
         let facts = crate::deep_learning::get_relevant_facts_for_chat(&data.db, "*", input)
             .await
@@ -386,6 +391,57 @@ impl Cortex {
 
     pub async fn think_for_user(input: &str, data: &web::Data<AppState>, _user_id: &str, _username: Option<&str>) -> String {
         Self::think(input, data).await
+    }
+
+    /// Detect if message is a simple greeting
+    fn is_simple_greeting(message: &str) -> bool {
+        let lower_msg = message.to_lowercase();
+        let lower = lower_msg.trim();
+        let common_greetings = [
+            "hello", "hi", "hey", "greetings", "howdy",
+            "what's up", "whats up", "yo", "sup",
+            "good morning", "good afternoon", "good evening",
+            "morning", "afternoon", "evening",
+            "how are you", "how're you", "how are you doing",
+            "how do you do", "pleased to meet you"
+        ];
+
+        for greeting in &common_greetings {
+            if lower == *greeting || lower.starts_with(&format!("{} ", greeting)) || lower.ends_with(&format!(" {}", greeting)) {
+                return true;
+            }
+        }
+
+        // Also detect very short messages that look like greetings
+        lower.len() <= 10 && (
+            lower.ends_with("?") && !lower.contains(" ")
+            || lower == "hello?" || lower == "hi?" || lower == "hey?"
+        )
+    }
+
+    /// Generate appropriate greeting response
+    fn handle_greeting(message: &str) -> String {
+        let lower_msg = message.to_lowercase();
+        let lower = lower_msg.trim();
+
+        // Generate contextual greetings
+        let response = if lower.contains("morning") {
+            "Good morning! What would you like to talk about today?"
+        } else if lower.contains("afternoon") {
+            "Good afternoon! How can I help you?"
+        } else if lower.contains("evening") {
+            "Good evening! What's on your mind?"
+        } else if lower.contains("how are") || lower.contains("how're") {
+            "I'm here and ready to help! What would you like to know?"
+        } else if lower.contains("up") {
+            "Not much! What would you like to talk about?"
+        } else if lower.contains("hey") {
+            "Hey there! What can I help you with?"
+        } else {
+            "Hello! I'm ready to learn and help. What's your question?"
+        };
+
+        response.to_string()
     }
 }
 
