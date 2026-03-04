@@ -691,6 +691,49 @@ pub async fn get_relevant_facts_for_chat(
         .collect())
 }
 
+/// Get relevant facts with conversation context awareness
+/// Prioritizes facts related to the current conversation topic
+pub async fn get_relevant_facts_with_context(
+    db: &SqlitePool,
+    session_id: &str,
+    user_id: Option<&str>,
+    query: &str,
+) -> Result<Vec<LearnedFact>, String> {
+    // Load conversation context to understand current topic
+    let context = match crate::conversation_context::load_conversation_context(
+        db,
+        session_id,
+        user_id,
+    )
+    .await
+    {
+        Ok(ctx) => ctx,
+        Err(_) => {
+            // Fall back to generic search if context loading fails
+            return get_relevant_facts_for_chat(db, "*", query).await;
+        }
+    };
+
+    // Extract primary topic from conversation context
+    let primary_topic = if !context.current_topic.is_empty() {
+        context.current_topic.as_str()
+    } else if let Some(topic_node) = context.topic_stack.first() {
+        topic_node.name.as_str()
+    } else {
+        "*"
+    };
+
+    // Search with primary topic, then widen if needed
+    let mut facts = get_relevant_facts_for_chat(db, primary_topic, query).await?;
+
+    // If no facts found in primary topic, search broadly
+    if facts.is_empty() {
+        facts = get_relevant_facts_for_chat(db, "*", query).await?;
+    }
+
+    Ok(facts)
+}
+
 /// Find facts related to a given set of facts based on shared concepts
 pub async fn find_related_facts(
     db: &SqlitePool,
