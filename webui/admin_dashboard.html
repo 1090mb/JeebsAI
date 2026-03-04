@@ -1,541 +1,623 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Admin Dashboard — JeebsAI</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/webui/style.css"/>
-<style>
-@keyframes slide-down{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-.feed-item{border-bottom:1px solid var(--border);padding:10px 0}
-</style>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>JeebsAI - Admin Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="/webui/style.css"/>
+    <style>
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .control-section {
+            padding: 20px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+        }
+
+        .control-section h2 {
+            font-size: 1.1rem;
+            margin: 0 0 16px 0;
+            color: var(--text);
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 8px;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .control-item:last-child {
+            border-bottom: none;
+        }
+
+        .control-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-on {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-off {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: var(--good);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+
+        .metric-box {
+            padding: 16px;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+        }
+
+        .list-item {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .action-btn-small {
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .action-btn-small:hover {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .scroll-list {
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        .scroll-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scroll-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scroll-list::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .header-user {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .section-full {
+            grid-column: 1 / -1;
+        }
+    </style>
 </head>
-<body>
-<div id="app-layout">
-  <aside id="sidebar-container"></aside>
-  <main class="main-content">
-<div class="shell" style="">
-  <h1 style="margin-bottom:24px">Admin Dashboard</h1>
+<body data-theme="dark">
+    <div id="app-layout">
+        <aside id="sidebar-container"></aside>
+        <main class="main-content" style="padding: 30px 40px;">
+            <div class="header-top">
+                <h1 style="margin: 0;">🎛️ Admin Control Panel</h1>
+                <div class="header-user">
+                    <span>Logged in as <strong id="adminUsername">Loading...</strong></span>
+                    <span class="user-badge">SUPER ADMIN</span>
+                </div>
+            </div>
 
-  <!-- System Status -->
-  <div class="card card-glow">
-    <h3>System Status</h3>
-    <div id="systemStatus" class="data-list">
-      <div class="data-list-item"><span>Server</span><span id="srvStatus" class="badge badge-accent">Checking...</span></div>
-      <div class="data-list-item"><span>Uptime</span><span id="srvUptime" class="text-muted">—</span></div>
+            <!-- System Status Overview -->
+            <div class="control-section section-full">
+                <h2>System Status</h2>
+                <div class="admin-grid">
+                    <div class="metric-box">
+                        <div class="metric-value" id="serverStatus">🟢</div>
+                        <div class="metric-label">Server</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-value" id="uptimeValue">--</div>
+                        <div class="metric-label">Uptime</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-value" id="sessionCount">0</div>
+                        <div class="metric-label">Active Sessions</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-value" id="userCount">0</div>
+                        <div class="metric-label">Total Users</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features & Controls -->
+            <div class="admin-grid">
+                <div class="control-section">
+                    <h2>⚙️ Feature Controls</h2>
+
+                    <div class="control-item">
+                        <div class="control-label">
+                            🌐 Internet Access
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="internetToggle" onchange="toggleInternet()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div style="padding: 8px 0; font-size: 0.8rem; color: var(--muted);">
+                        Status: <span id="internetStatus" class="status-badge status-off">OFF</span>
+                    </div>
+
+                    <div class="control-item" style="margin-top: 12px;">
+                        <div class="control-label">
+                            📚 Training Mode
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="trainingToggle" onchange="toggleTraining()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div style="padding: 8px 0; font-size: 0.8rem; color: var(--muted);">
+                        Status: <span id="trainingStatus" class="status-badge status-off">OFF</span>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h2>🧠 Brain Info</h2>
+
+                    <div class="control-item">
+                        <span>Knowledge Nodes</span>
+                        <strong id="brainNodes" style="color: var(--accent);">--</strong>
+                    </div>
+                    <div class="control-item">
+                        <span>Brain Entropy</span>
+                        <strong id="brainEntropy" style="color: var(--accent);">--</strong>
+                    </div>
+                    <div class="control-item">
+                        <span>Comprehension</span>
+                        <strong id="comprehension" style="color: var(--accent);">--</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User & Session Management -->
+            <div class="admin-grid">
+                <div class="control-section">
+                    <h2>👥 Active Sessions</h2>
+                    <div class="scroll-list" id="sessionsList">
+                        <div style="text-align: center; padding: 20px; color: var(--muted);">Loading sessions...</div>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h2>👤 Users</h2>
+                    <div class="scroll-list" id="usersList">
+                        <div style="text-align: center; padding: 20px; color: var(--muted);">Loading users...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trainer Management -->
+            <div class="control-section section-full">
+                <h2>🎓 Trainer Management</h2>
+                <div style="margin-bottom: 16px;">
+                    <input type="text" id="trainerInput" placeholder="Enter username to add as trainer" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-2); color: var(--text); width: 300px;"/>
+                    <button class="btn btn-primary btn-sm" onclick="addTrainer()" style="margin-left: 8px;">Add Trainer</button>
+                </div>
+                <div class="scroll-list" id="trainerList">
+                    <div style="text-align: center; padding: 20px; color: var(--muted);">Loading trainers...</div>
+                </div>
+            </div>
+
+            <!-- System Logs -->
+            <div class="control-section section-full">
+                <h2>📋 Recent Logs</h2>
+                <div class="scroll-list" id="logsList" style="max-height: 250px; font-family: var(--font-mono); font-size: 0.8rem;">
+                    <div style="text-align: center; padding: 20px; color: var(--muted);">Loading logs...</div>
+                </div>
+            </div>
+
+            <!-- Backup & Export -->
+            <div class="control-section section-full">
+                <h2>💾 Data Management</h2>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-primary btn-sm" onclick="exportData()">📥 Export Database</button>
+                    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()">📤 Import Database</button>
+                    <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importData(this)"/>
+                </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="control-section section-full">
+                <h2>🔗 Quick Links</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+                    <a href="/webui/index.html" class="btn btn-ghost btn-sm" style="text-align: center;">💬 Chat Console</a>
+                    <a href="/webui/logs.html" class="btn btn-ghost btn-sm" style="text-align: center;">📊 View All Logs</a>
+                    <a href="/webui/trainer_panel.html" class="btn btn-ghost btn-sm" style="text-align: center;">🎓 Trainer Panel</a>
+                    <a href="/webui/evolution.html" class="btn btn-ghost btn-sm" style="text-align: center;">🔄 Evolution</a>
+                    <a href="/webui/visualize.html" class="btn btn-ghost btn-sm" style="text-align: center;">🧠 Brain Graph</a>
+                    <a href="/webui/admin_blacklist.html" class="btn btn-ghost btn-sm" style="text-align: center;">🚫 Blacklist</a>
+                </div>
+            </div>
+        </main>
     </div>
-  </div>
 
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
-    <!-- Feature Toggles -->
-    <div class="card">
-      <h3>Feature Toggles</h3>
-      <div class="data-list">
-        <div class="data-list-item">
-          <span>Internet Access <span id="dotInternet" style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:6px;background:#aaa;vertical-align:middle;"></span></span>
-          <span id="toggleInternet" class="badge">—</span>
-          <label class="switch" style="margin-left:16px;vertical-align:middle">
-            <input type="checkbox" id="internetSwitch" onchange="onInternetSwitch()">
-            <span class="slider round"></span>
-          </label>
-        </div>
-        <div class="data-list-item">
-          <span>Training Mode <span id="dotTraining" style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:6px;background:#aaa;vertical-align:middle;"></span></span>
-          <span id="toggleTraining" class="badge">—</span>
-          <label class="switch" style="margin-left:16px;vertical-align:middle">
-            <input type="checkbox" id="trainingSwitch" onchange="onTrainingSwitch()">
-            <span class="slider round"></span>
-          </label>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-        <!-- Training toggle replaced by switch above -->
-      </div>
-    </div>
-
-    <!-- Live Learning Feed -->
-    <div class="card">
-      <h3 style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-        <span>🧠 Live Learning Feed</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button id="pauseFeedBtn" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:0.7em" onclick="toggleFeedPause()">Pause</button>
-          <button class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:0.7em" onclick="clearLiveFeed()">Clear</button>
-          <label style="font-size:0.8em;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none"><input type="checkbox" checked onchange="toggleFeedFilter('source', this.checked)"> Sources</label>
-          <label style="font-size:0.8em;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none"><input type="checkbox" checked onchange="toggleFeedFilter('fact', this.checked)"> Facts</label>
-          <span class="badge badge-accent" style="font-size:0.7em">REAL-TIME</span>
-        </div>
-      </h3>
-      <div id="live-feed" class="scroll-box" style="max-height:200px; overflow-y:auto; padding-right:5px;">
-        <div class="text-muted" style="text-align:center; padding:20px;">Waiting for activity...</div>
-      </div>
-    </div>
-
-    <!-- Trainer Roles -->
-    <div class="card">
-      <h3>Trainer Roles</h3>
-      <div id="trainerList" class="scroll-box" style="max-height:160px"><span class="text-muted">Loading...</span></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <input id="trainerInput" class="form-input" placeholder="Username" style="flex:1"/>
-        <button class="btn btn-accent btn-sm" onclick="addTrainer()">Add</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
-    <!-- Active Sessions -->
-    <div id="activeSessionsCard" class="card">
-      <h3>Active Sessions</h3>
-      <div id="sessionsList" class="scroll-box" style="max-height:220px"><span class="text-muted">Loading...</span></div>
-    </div>
-
-    <!-- Users -->
-    <div class="card">
-      <h3>Users</h3>
-      <div id="usersList" class="scroll-box" style="max-height:220px"><span class="text-muted">Loading...</span></div>
-    </div>
-  </div>
-
-  <!-- Server Logs -->
-  <div class="card">
-    <h3>Recent Logs</h3>
-    <div id="recentLogs" class="log-box" style="max-height:260px">Loading...</div>
-    <div style="margin-top:8px;text-align:right"><a href="/webui/logs.html" class="btn btn-ghost btn-sm">View All Logs &rarr;</a></div>
-  </div>
-
-  <!-- Backups -->
-  <div class="card">
-    <h3>Backups</h3>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="exportData()">Export Data</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()">Import Data</button>
-      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(this)"/>
-    </div>
-  </div>
-
-  <!-- Quick Links -->
-  <div class="card">
-    <h3>Quick Links</h3>
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
-      <a href="/webui/evolution.html" class="link-tile"><span class="link-tile-label">Evolution</span></a>
-      <a href="/webui/logs.html" class="link-tile"><span class="link-tile-label">Logs</span></a>
-      <a href="/webui/trainer_panel.html" class="link-tile"><span class="link-tile-label">Trainer</span></a>
-      <a href="/webui/admin_blacklist.html" class="link-tile"><span class="link-tile-label">Blacklist</span></a>
-      <a href="/webui/admin_whitelist.html" class="link-tile"><span class="link-tile-label">Whitelist</span></a>
-      <a href="/webui/admin_anomalies.html" class="link-tile"><span class="link-tile-label">Anomalies</span></a>
-      <a href="/webui/admin_reasoning.html" class="link-tile"><span class="link-tile-label">Reasoning</span></a>
-      <a href="/webui/visualize.html" class="link-tile"><span class="link-tile-label">Brain Graph</span></a>
-      <a id="codegen-link" href="/webui/codegen.html" class="link-tile" style="display:none"><span class="link-tile-label">Code Generation</span></a>
-    </div>
-  </div>
-
-  <!-- Training Controls -->
-  <div class="card">
-    <!-- Training controls removed: only available in Trainer Panel -->
-  </div>
-</div>
-
-<script src="/webui/auth.js"></script>
-<script src="/webui/nav.js"></script>
-<script>
-// Show codegen link only for admins
-requireAuth().then(auth => {
-  if (auth && auth.loggedIn && auth.is_admin) {
-    const cg = document.getElementById('codegen-link');
-    if (cg) cg.style.display = '';
-  }
-});
-// Toggle switch style
-const style = document.createElement('style');
-style.innerHTML = `
-.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
-.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-input:checked + .slider { background-color: #2ecc40; }
-input:checked + .slider:before { transform: translateX(20px); }
-.slider.round { border-radius: 24px; }
-.slider.round:before { border-radius: 50%; }
-`;
-document.head.appendChild(style);
-
-JeebsNav.init('admin');
-
-let lastSeenSource = "";
-let lastSeenFact = "";
-let isFeedPaused = false;
-
-window.toggleFeedFilter = function(type, show) {
-    const feed = document.getElementById('live-feed');
-    if(!feed) return;
-    const items = feed.querySelectorAll(`.feed-item[data-type="${type}"]`);
-    items.forEach(item => item.style.display = show ? '' : 'none');
-};
-
-window.toggleFeedPause = function() {
-    isFeedPaused = !isFeedPaused;
-    const btn = document.getElementById('pauseFeedBtn');
-    if(btn) {
-        btn.textContent = isFeedPaused ? "Resume" : "Pause";
-        if(isFeedPaused) { btn.classList.remove('btn-ghost'); btn.classList.add('btn-accent'); }
-        else { btn.classList.add('btn-ghost'); btn.classList.remove('btn-accent'); }
-    }
-};
-
-window.clearLiveFeed = function() {
-    const feed = document.getElementById('live-feed');
-    if(feed) feed.innerHTML = '<div class="text-muted" style="text-align:center; padding:20px;">Waiting for activity...</div>';
-    lastSeenSource = "";
-    lastSeenFact = "";
-};
-
-function addToLiveFeed(type, data) {
-    if(isFeedPaused) return;
-    const feed = document.getElementById('live-feed');
-    if (!feed) return;
-    
-    // Deduplication check
-    const dataStr = JSON.stringify(data);
-    if (type === 'source' && dataStr === lastSeenSource) return;
-    if (type === 'fact' && dataStr === lastSeenFact) return;
-    
-    if (type === 'source') lastSeenSource = dataStr;
-    if (type === 'fact') lastSeenFact = dataStr;
-
-    // Remove empty state
-    if (feed.querySelector('.text-muted') && feed.children.length === 1) {
-        feed.innerHTML = '';
-    }
-    
-    const row = document.createElement('div');
-    row.className = 'feed-item';
-    row.setAttribute('data-type', type);
-    row.style.animation = 'slide-down 0.3s ease';
-    
-    const time = new Date().toLocaleTimeString();
-    
-    if (type === 'source') {
-        row.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start;width:100%"><span class="text-muted" style="font-size:0.8em;min-width:65px;padding-top:2px">${time}</span><div style="flex:1"><span class="badge" style="background:rgba(83,216,251,0.1);color:#53d8fb;margin-right:6px;font-size:0.7em">SOURCE</span><a href="${escapeHtml(data)}" target="_blank" style="color:var(--text);text-decoration:none;word-break:break-all;font-size:0.9em">${escapeHtml(data)}</a></div></div>`;
-    } else if (type === 'fact') {
-        const fact = data.fact || data.title || (typeof data === 'string' ? data : JSON.stringify(data));
-        const source = data.source ? `<div class="text-muted" style="font-size:0.8em;margin-top:2px;margin-left:2px">From: ${escapeHtml(data.source)}</div>` : '';
-        row.innerHTML = `<div style="display:flex;gap:10px;align-items:flex-start;width:100%"><span class="text-muted" style="font-size:0.8em;min-width:65px;padding-top:2px">${time}</span><div style="flex:1"><span class="badge" style="background:rgba(46,204,64,0.1);color:#2ecc40;margin-right:6px;font-size:0.7em">LEARNED</span><span style="font-weight:500;font-size:0.95em;color:var(--text-1)">${escapeHtml(fact)}</span>${source}</div></div>`;
-    }
-    
-    // Check current filter state
-    const filterCheckbox = document.querySelector(`input[onchange*="'${type}'"]`);
-    if (filterCheckbox && !filterCheckbox.checked) {
-        row.style.display = 'none';
-    }
-    
-    feed.insertBefore(row, feed.firstChild);
-    if (feed.children.length > 100) feed.removeChild(feed.lastChild);
-    feed.scrollTop = 0;
-}
-
-function escapeHtml(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
-
-async function loadStatus(){
-  try{
-    const res=await safeFetch("/health");
-    if(res.ok){const d=await res.json();document.getElementById("srvStatus").textContent=d.status.toUpperCase();document.getElementById("srvStatus").className="badge "+(d.status==="ok"?"badge-success":"badge-danger");}
-  }catch(e){}
-  try{
-    const res=await safeFetch("/api/admin/status",{credentials:"same-origin",headers:authHeaders()});
-    if(res.ok){const d=await res.json();document.getElementById("srvUptime").textContent=d.uptime||"—";}
-  }catch(e){}
-
-  // Fetch server stats (includes storage) and display available storage in MB
-  try{
-    const res = await safeFetch('/api/server/stats', { credentials: 'same-origin', headers: authHeaders() });
-    if(res.ok){
-      const d = await res.json();
-      const storage = (d.system && d.system.storage) ? d.system.storage : null;
-      if(storage && typeof storage.available_mb !== 'undefined'){
-        const avail = Math.round(storage.available_mb);
-        const total = Math.round(storage.total_mb || 0);
-        const el = document.getElementById('srvStatus');
-        el.textContent = avail + ' MB free' + (total ? (' of ' + total + ' MB') : '');
-        el.className = 'badge badge-accent';
-        el.title = 'Available storage on server';
-      }
-    }
-  }catch(e){}
-}
-
-async function loadToggles(){
-  // Load and display the current state of Internet and Training toggles
-  try{
-    const res=await safeFetch("/api/admin/internet/status",{credentials:"same-origin",headers:authHeaders()});
-    if(res.ok){
-      const d=await res.json();
-      const el=document.getElementById("toggleInternet");
-      el.textContent=d.enabled?"ON":"OFF";
-      el.className="badge "+(d.enabled?"badge-success":"badge-danger");
-      el.dataset.enabled = d.enabled ? "1" : "0";
-      // Indicator dot
-      const dot=document.getElementById("dotInternet");
-      dot.style.background=d.enabled?"#2ecc40":"#e74c3c";
-      dot.title=d.enabled?"Internet enabled":"Internet disabled";
-      // Set switch state
-      const sw=document.getElementById("internetSwitch");
-      if(sw) sw.checked = !!d.enabled;
-    }
-  }catch(e){}
-  
-  // Ensure global handler exists (used by inline onchange attribute)
-  window.onInternetSwitch = function onInternetSwitch(){
-    const sw = document.getElementById("internetSwitch");
-    if (!sw) return;
-    // disable during request
-    sw.disabled = true;
-    toggleFeature('internet', sw.checked).finally(()=>{ sw.disabled = false; });
-  };
-  try{
-    const res=await safeFetch("/api/admin/training/status",{credentials:"same-origin",headers:authHeaders()});
-    if(res.ok){
-      const d=await res.json();
-      const t=d.training||{};
-      const el=document.getElementById("toggleTraining");
-      el.textContent=t.enabled?"ON":"OFF";
-      el.className="badge "+(t.enabled?"badge-success":"badge-danger");
-      el.dataset.enabled = t.enabled ? "1" : "0";
-      // Indicator dot
-      const dot=document.getElementById("dotTraining");
-      dot.style.background=t.enabled?"#2ecc40":"#e74c3c";
-      dot.title=t.enabled?"Training enabled":"Training disabled";
-      // Set training switch state (if present)
-      const ts = document.getElementById('trainingSwitch');
-      if(ts) ts.checked = !!t.enabled;
-    }
-  }catch(e){}
-}
-
-async function toggleFeature(feat,on){
-  // Toggle logic for Internet and Training
-  if(feat==='internet'){
-    // Optimistically update UI immediately
-    const el=document.getElementById("toggleInternet");
-    const dot=document.getElementById("dotInternet");
-    el.textContent=on?"ON":"OFF";
-    el.className="badge "+(on?"badge-success":"badge-danger");
-    el.dataset.enabled = on ? "1" : "0";
-    dot.style.background=on?"#2ecc40":"#e74c3c";
-    dot.title=on?"Internet enabled":"Internet disabled";
-    // Send request
-    await safeFetch("/api/admin/internet/set",{
-      method:"POST",
-      credentials:"same-origin",
-      headers:authHeaders(true),
-      body:JSON.stringify({enabled:on})
-    });
-  } else if(feat==='training') {
-    // Optimistically update UI immediately
-    const el=document.getElementById("toggleTraining");
-    const dot=document.getElementById("dotTraining");
-    el.textContent=on?"ON":"OFF";
-    el.className="badge "+(on?"badge-success":"badge-danger");
-    el.dataset.enabled = on ? "1" : "0";
-    dot.style.background=on?"#2ecc40":"#e74c3c";
-    dot.title=on?"Training enabled":"Training disabled";
-    // Send request
-    await safeFetch("/api/admin/training/mode",{
-      method:"POST",
-      credentials:"same-origin",
-      headers:authHeaders(true),
-      body:JSON.stringify({enabled:on})
-    });
-  }
-  // After toggling, reload toggle states and indicators (in case backend state differs)
-  loadToggles();
-}
-
-// Global handler for training switch (used by inline onchange)
-window.onTrainingSwitch = function onTrainingSwitch(){
-  const sw = document.getElementById('trainingSwitch');
-  if(!sw) return;
-  sw.disabled = true;
-  toggleFeature('training', sw.checked).finally(()=>{ sw.disabled = false; });
-};
-
-// ENFORCEMENT LOGIC (for backend, but documented here for clarity):
-// - If Training is OFF: No training can occur anywhere (trainers, background, or JeebsAI itself)
-// - If Internet is OFF: JeebsAI cannot access the internet for any reason
-// - If Internet is ON and Training is OFF: JeebsAI can autonomously browse/gather info for its brain, but no explicit training by trainers
-// - If Training is ON: Trainers can train JeebsAI, and JeebsAI can also learn autonomously if internet is ON
-
-async function loadSessions(){
-  try{
-    // Only show sessions for admin or super_admin roles
-    const auth = await getAuthState();
-    const card = document.getElementById('activeSessionsCard');
-    const el = document.getElementById('sessionsList');
-    if(!auth || (!auth.isAdmin && auth.role !== 'super_admin')){
-      if(card) card.style.display = 'none';
-      if(el) el.innerHTML = '<span class="text-muted">Restricted to admin users.</span>';
-      return;
-    }
-    if(card) card.style.display = '';
-    const res=await safeFetch("/api/admin/sessions",{credentials:"same-origin",headers:authHeaders()});
-    if(!res.ok){el.innerHTML='<span class="text-muted">Access denied.</span>';return;}
-    const sessions=await res.json();
-    if(!sessions.length){el.innerHTML='<span class="text-muted">No active sessions.</span>';return;}
-    el.innerHTML=sessions.map(function(s){
-      return '<div class="data-list-item"><div><strong>'+escapeHtml(s.username)+'</strong> <span class="text-muted">'+escapeHtml(s.ip)+'</span><br/><span class="text-muted" style="font-size:0.8em">Last: '+new Date(s.last_seen).toLocaleString()+'</span></div><button class="btn btn-danger btn-sm" onclick="endSession(\''+escapeHtml(s.username)+'\')">End</button></div>';
-    }).join("");
-  }catch(e){document.getElementById("sessionsList").innerHTML='<span class="text-muted">Error.</span>';} 
-}
-
-async function endSession(u){
-  if(!confirm("End session for "+u+"?"))return;
-  await safeFetch("/api/admin/session/"+encodeURIComponent(u),{method:"DELETE",credentials:"same-origin",headers:authHeaders()});
-  loadSessions();
-}
-
-async function loadUsers(){
-  try{
-    const res=await safeFetch("/api/admin/users",{credentials:"same-origin",headers:authHeaders()});
-    const el=document.getElementById("usersList");
-    if(!res.ok){el.innerHTML='<span class="text-muted">Access denied.</span>';return;}
-    const users=await res.json();
-    el.innerHTML=users.map(function(u){
-      return '<div class="data-list-item"><span>'+escapeHtml(u.username||u)+'</span><span class="badge badge-accent">'+(u.role||"user")+'</span></div>';
-    }).join("");
-  }catch(e){}
-}
-
-async function loadTrainers(){
-  try{
-    const res=await safeFetch("/api/admin/users",{credentials:"same-origin",headers:authHeaders()});
-    const el=document.getElementById("trainerList");
-    if(!res.ok){el.innerHTML='<span class="text-muted">Access denied.</span>';return;}
-    const users=await res.json();
-    const trainers=users.filter(function(u){return u.role==='trainer'||u.role==='admin';});
-    if(!trainers.length){el.innerHTML='<span class="text-muted">No trainers.</span>';return;}
-    el.innerHTML=trainers.map(function(t){
-      return '<div class="data-list-item"><span>'+escapeHtml(t.username)+'</span><span class="badge">'+(t.role)+'</span></div>';
-    }).join("");
-  }catch(e){}
-}
-
-async function addTrainer(){
-  var u=document.getElementById("trainerInput").value.trim();
-  if(!u)return;
-  await safeFetch("/api/admin/users/"+encodeURIComponent(u)+"/role",{method:"POST",credentials:"same-origin",headers:authHeaders(true),body:JSON.stringify({role:"trainer"})});
-  document.getElementById("trainerInput").value="";
-  loadTrainers();
-}
-
-async function loadLogs(){
-  try{
-    const res=await safeFetch("/api/admin/logs?limit=20",{credentials:"same-origin",headers:authHeaders()});
-    const el=document.getElementById("recentLogs");
-    if(!res.ok){el.textContent="Access denied.";return;}
-    const logs=await res.json();
-    el.innerHTML=logs.slice().reverse().map(function(l){
-      var cls=l.level==='ERROR'?'color:var(--danger)':l.level==='WARN'?'color:var(--accent-2)':'';
-      return '<div style="'+cls+'"><span class="text-muted">['+escapeHtml(l.timestamp)+']</span> <strong>['+escapeHtml(l.category)+']</strong> '+escapeHtml(l.message)+'</div>';
-    }).join("");
-  }catch(e){document.getElementById("recentLogs").textContent="Error loading logs.";}
-}
-
-async function exportData(){
-  window.location.href="/api/admin/export";
-}
-
-async function importData(input){
-  if(!input.files.length)return;
-  var formData=new FormData();formData.append("file",input.files[0]);
-  var res=await safeFetch("/api/admin/import",{method:"POST",credentials:"same-origin",headers:{Authorization:"Bearer "+jeebsGetToken()},body:formData});
-  alert(res.ok?"Import successful!":"Import failed.");
-  input.value="";
-}
-
-async function loadTrainingStatus(){
-  try{
-    const res=await safeFetch('/api/admin/training/status');
-    if(!res.ok){
-      const el = document.getElementById('training-status');
-      if(el) el.textContent='Training status unavailable';
-      return;
-    }
-    const d=await res.json();
-    const t=d.training||{};
-    const el = document.getElementById('training-status');
-    if(el) el.textContent='Training: '+(t.enabled?'ON':'OFF')+(t.status?(' | '+t.status):'');
-    
-    // Populate live feed
-    if(t.last_websites && t.last_websites.length) t.last_websites.forEach(w => addToLiveFeed('source', w));
-    if(t.last_learned_items && t.last_learned_items.length) t.last_learned_items.forEach(i => addToLiveFeed('fact', i));
-  }catch(e){
-    const el = document.getElementById('training-status');
-    if(el) el.textContent='Training status error';
-  }
-}
-
-async function setTrainingMode(on){
-  try{
-    await safeFetch('/api/admin/training/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:on})});
-    loadTrainingStatus();
-    logTraining('Training mode set to '+(on?'ON':'OFF'));
-  }catch(e){logTraining('Failed to set training mode');}
-}
-
-async function runTrainingNow(){
-  logTraining('Starting training session...');
-  try{
-    const res=await safeFetch('/api/admin/training/run',{method:'POST'});
-    if(!res.ok){logTraining('Training failed to start');return;}
-    const d=await res.json();
-    logTraining('Training started: '+(d.status||'in progress'));
-    if(d.topic||d.subject||d.learning){
-      logTraining('JeebsAI is now studying: '+(d.topic||d.subject||d.learning));
-    }
-    pollTrainingLog();
-  }catch(e){logTraining('Training error');}
-}
-
-function logTraining(msg){
-  const log=document.getElementById('training-log');
-  log.textContent=msg+'\n'+log.textContent;
-}
-
-async function pollTrainingLog(){
-  // Poll backend for training log/status every 5s
-  for(let i=0;i<60;i++){ // 5 min minimum
-    await new Promise(r=>setTimeout(r,5000));
-    try{
-      const res=await safeFetch('/api/admin/training/status');
-      if(!res.ok)continue;
-      const d=await res.json();
-      if(d.training){
-        if(d.training.learning||d.training.topic||d.training.subject){
-          logTraining('JeebsAI is studying: '+(d.training.learning||d.training.topic||d.training.subject));
+    <script src="/webui/auth.js"></script>
+    <script src="/webui/nav.js"></script>
+    <script>
+        // Check auth and require admin
+        async function checkAuth() {
+            const res = await safeFetch('/api/auth/status', { credentials: 'same-origin' });
+            const data = await res.json();
+            document.getElementById('adminUsername').textContent = data.username || 'Unknown';
+            return data;
         }
-        if(d.training.log){
-          logTraining(d.training.log);
-        }
-        if(d.training.status==='done'){
-          logTraining('Training complete.');
-          break;
-        }
-      }
-    }catch(e){logTraining('Training log error');}
-  }
-}
 
-(async function(){
-  var auth=await requireAuth("admin");
-  if(!auth)return;
-  startAuthGuard("admin");
-  loadStatus();loadToggles();loadSessions();loadUsers();loadTrainers();loadLogs();loadTrainingStatus();
-  setInterval(loadStatus,15000);
-  setInterval(loadSessions,20000);
-  setInterval(loadTrainingStatus,10000);
-})();
-</script>
-  </main>
-  </div>
+        // Load system status
+        async function loadStatus() {
+            try {
+                const res = await safeFetch('/api/admin/status', {
+                    credentials: 'same-origin',
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('uptimeValue').textContent = data.uptime || '--';
+                }
+            } catch (e) {
+                console.error('Status error:', e);
+            }
+        }
+
+        // Load sessions
+        async function loadSessions() {
+            try {
+                const res = await safeFetch('/api/admin/sessions', {
+                    credentials: 'same-origin',
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    const sessions = await res.json();
+                    document.getElementById('sessionCount').textContent = sessions.length;
+                    let html = '';
+                    sessions.forEach(s => {
+                        html += `<div class="list-item"><strong>${s.username}</strong> <span style="color: var(--muted); font-size: 0.8rem;">${s.ip}</span></div>`;
+                    });
+                    document.getElementById('sessionsList').innerHTML = html || '<div style="color: var(--muted);">No active sessions</div>';
+                }
+            } catch (e) {
+                console.error('Sessions error:', e);
+            }
+        }
+
+        // Load users
+        async function loadUsers() {
+            try {
+                const res = await safeFetch('/api/admin/users', {
+                    credentials: 'same-origin',
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    const users = await res.json();
+                    document.getElementById('userCount').textContent = users.length;
+                    let html = '';
+                    users.forEach(u => {
+                        html += `<div class="list-item"><strong>${u.username}</strong> <span class="status-badge status-on">${u.role}</span></div>`;
+                    });
+                    document.getElementById('usersList').innerHTML = html || '<div style="color: var(--muted);">No users</div>';
+                }
+            } catch (e) {
+                console.error('Users error:', e);
+            }
+        }
+
+        // Load trainers
+        async function loadTrainers() {
+            try {
+                const res = await safeFetch('/api/admin/users', {
+                    credentials: 'same-origin',
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    const users = await res.json();
+                    const trainers = users.filter(u => u.role === 'trainer' || u.role === 'admin');
+                    let html = '';
+                    trainers.forEach(t => {
+                        html += `<div class="list-item"><span>${t.username}</span> <span class="status-badge status-on">${t.role}</span></div>`;
+                    });
+                    document.getElementById('trainerList').innerHTML = html || '<div style="color: var(--muted);">No trainers yet</div>';
+                }
+            } catch (e) {
+                console.error('Trainers error:', e);
+            }
+        }
+
+        // Load logs
+        async function loadLogs() {
+            try {
+                const res = await safeFetch('/api/admin/logs?limit=15', {
+                    credentials: 'same-origin',
+                    headers: authHeaders()
+                });
+                if (res.ok) {
+                    const logs = await res.json();
+                    let html = '';
+                    logs.slice().reverse().forEach(l => {
+                        const color = l.level === 'ERROR' ? 'color: #ef4444;' : l.level === 'WARN' ? 'color: #f59e0b;' : '';
+                        html += `<div style="${color}">[${l.timestamp}] [${l.category}] ${l.message}</div>`;
+                    });
+                    document.getElementById('logsList').innerHTML = html || '<div style="color: var(--muted);">No logs</div>';
+                }
+            } catch (e) {
+                console.error('Logs error:', e);
+            }
+        }
+
+        // Load features
+        async function loadFeatures() {
+            try {
+                const internetRes = await safeFetch('/api/admin/internet/status', {
+                    credentials: 'same-origin',
+                    headers: authHeaders()
+                });
+                if (internetRes.ok) {
+                    const data = await internetRes.json();
+                    document.getElementById('internetToggle').checked = data.enabled;
+                    document.getElementById('internetStatus').textContent = data.enabled ? 'ON' : 'OFF';
+                    document.getElementById('internetStatus').className = data.enabled ? 'status-badge status-on' : 'status-badge status-off';
+                }
+            } catch (e) {}
+
+            try {
+                const trainingRes = await safeFetch('/api/admin/training/status', {
+                    credentials: 'same-origin',
+                    headers: authHeaders()
+                });
+                if (trainingRes.ok) {
+                    const data = await trainingRes.json();
+                    const enabled = data.training && data.training.enabled;
+                    document.getElementById('trainingToggle').checked = enabled;
+                    document.getElementById('trainingStatus').textContent = enabled ? 'ON' : 'OFF';
+                    document.getElementById('trainingStatus').className = enabled ? 'status-badge status-on' : 'status-badge status-off';
+                }
+            } catch (e) {}
+        }
+
+        // Load brain info
+        async function loadBrainInfo() {
+            try {
+                const res = await fetch('/api/jeebs_mood', { credentials: 'same-origin' });
+                const text = await res.text();
+                if (text) {
+                    const nodesMatch = text.match(/(\d+)\s+nodes/);
+                    const entropyMatch = text.match(/entropy\s+([\d.]+)/);
+                    if (nodesMatch) document.getElementById('brainNodes').textContent = nodesMatch[1];
+                    if (entropyMatch) {
+                        document.getElementById('brainEntropy').textContent = parseFloat(entropyMatch[1]).toFixed(2);
+                        document.getElementById('comprehension').textContent = (parseFloat(entropyMatch[1]) * 0.8).toFixed(1);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // Toggle internet
+        async function toggleInternet() {
+            const enabled = document.getElementById('internetToggle').checked;
+            try {
+                await safeFetch('/api/admin/internet/set', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { ...authHeaders(true), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                loadFeatures();
+            } catch (e) {
+                alert('Failed to toggle internet');
+            }
+        }
+
+        // Toggle training
+        async function toggleTraining() {
+            const enabled = document.getElementById('trainingToggle').checked;
+            try {
+                await safeFetch('/api/admin/training/mode', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { ...authHeaders(true), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                loadFeatures();
+            } catch (e) {
+                alert('Failed to toggle training');
+            }
+        }
+
+        // Add trainer
+        async function addTrainer() {
+            const username = document.getElementById('trainerInput').value.trim();
+            if (!username) return;
+            try {
+                await safeFetch(`/api/admin/users/${encodeURIComponent(username)}/role`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { ...authHeaders(true), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: 'trainer' })
+                });
+                document.getElementById('trainerInput').value = '';
+                loadTrainers();
+            } catch (e) {
+                alert('Failed to add trainer');
+            }
+        }
+
+        // Export data
+        async function exportData() {
+            window.location.href = '/api/admin/export';
+        }
+
+        // Import data
+        async function importData(input) {
+            if (!input.files.length) return;
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+            try {
+                const res = await safeFetch('/api/admin/import', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { Authorization: `Bearer ${jeebsGetToken()}` },
+                    body: formData
+                });
+                if (res.ok) alert('Import successful!');
+                else alert('Import failed');
+            } catch (e) {
+                alert('Import error: ' + e.message);
+            }
+            input.value = '';
+        }
+
+        // Initialize
+        async function init() {
+            JeebsNav.init('admin');
+            const auth = await checkAuth();
+            if (!auth.is_admin) {
+                document.body.innerHTML = '<div style="padding: 40px; text-align: center;"><h1>Access Denied</h1><p>You must be an admin to access this page.</p><a href="/webui/index.html" class="btn btn-primary">Return to Chat</a></div>';
+                return;
+            }
+
+            loadStatus();
+            loadSessions();
+            loadUsers();
+            loadTrainers();
+            loadLogs();
+            loadFeatures();
+            loadBrainInfo();
+
+            // Refresh every 10 seconds
+            setInterval(() => {
+                loadStatus();
+                loadSessions();
+                loadLogs();
+                loadBrainInfo();
+            }, 10000);
+        }
+
+        init();
+    </script>
 </body>
 </html>
