@@ -18,46 +18,73 @@
             </div>
             <h1 class="title">JeebsAI</h1>
             <p class="subtitle">Conversational Intelligence, Reimagined</p>
-            <form class="login-form" action="chat.html" method="get">
-                <button type="submit" class="login-btn pgp-btn">Sign In with PGP</button>
-            </form>
-            <div class="pgp-desc">Authenticate securely using your PGP key. No username or password required.</div>
+            <div id="authViews">
+                <div id="loginView" class="view active">
+                    <form id="loginForm" class="auth-form">
+                        <h2>PGP Login</h2>
+                        <div class="form-group">
+                            <label for="loginUsername">Username</label>
+                            <input id="loginUsername" name="username" required placeholder="your.username" autocomplete="username" />
+                        </div>
+                        <div class="pgp-workflow">
+                            <div class="workflow-step">
+                                <div class="step-label">Step 1: Generate Challenge</div>
+                                <button type="button" id="generateChallengeBtn" class="btn-workflow">Generate Challenge</button>
+                                <textarea id="unsignedMessage" readonly class="challenge-text" placeholder="Challenge will appear here..."></textarea>
+                                <button type="button" id="copyChallengeBtn" class="btn-copy-challenge">Copy to Clipboard</button>
+                            </div>
+                            <div class="workflow-step">
+                                <div class="step-label">Step 2: Sign with PGP Key</div>
+                                <p class="step-hint">Sign the challenge with your private PGP key using your preferred tool</p>
+                            </div>
+                            <div class="workflow-step">
+                                <div class="step-label">Step 3: Paste Signed Message</div>
+                                <textarea id="signedMessage" name="signed_message" required placeholder="Paste your signed PGP message here..." class="form-textarea"></textarea>
+                            </div>
+                        </div>
+                        <div class="form-options">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="rememberMe" />
+                                <span>Remember this device</span>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn-primary btn-large">Sign In Securely</button>
+                        <div class="form-divider">or</div>
+                        <button type="button" id="switchToRegister" class="btn-secondary btn-large">Create New Account</button>
+                        <div class="pgp-desc">Authenticate securely using your PGP key. No password required.</div>
+                    </form>
+                </div>
+                <div id="registerView" class="view">
+                    <form id="registerForm" class="auth-form">
+                        <h2>PGP-Based Registration</h2>
+                        <div class="form-group">
+                            <label for="regUsername">Username</label>
+                            <input id="regUsername" name="username" required placeholder="choose.a.username" autocomplete="username" pattern="^[a-zA-Z0-9_\-]{3,32}$" title="3-32 characters: letters, numbers, dash, underscore" />
+                            <span class="form-hint">3-32 characters: letters, numbers, dash, underscore</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="regEmail">Email Address (optional)</label>
+                            <input id="regEmail" name="email" type="email" placeholder="your@email.com" autocomplete="email" />
+                            <span class="form-hint">For account recovery purposes only</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="publicKey">Your PGP Public Key</label>
+                            <textarea id="publicKey" name="pgp_public_key" required placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----&#10;...&#10;-----END PGP PUBLIC KEY BLOCK-----" class="form-textarea-large"></textarea>
+                            <span class="form-hint">Paste your ASCII-armored PGP public key. This is used to verify your identity during login.</span>
+                        </div>
+                        <button type="submit" class="btn-primary btn-large">Create Account</button>
+                        <div class="form-divider">or</div>
+                        <button type="button" id="switchToLogin" class="btn-secondary btn-large">Back to Sign In</button>
+                        <div class="pgp-desc">Your private PGP key never leaves your device. Keep it safe!</div>
+                    </form>
+                </div>
+            </div>
         </div>
         <footer>
             <p>&copy; 2026 JeebsAI &mdash; All rights reserved.</p>
         </footer>
-    <footer>
-        <p>&copy; 2026 JeebsAI</p>
-    </footer>
-</body>
+    </body>
 </html>
-
-                                    <div class="form-group">
-                                        <label for="loginUsername">Username</label>
-                                        <input id="loginUsername" name="username" required
-                                            placeholder="your.username" autocomplete="username" />
-                                    </div>
-
-                                    <div class="pgp-workflow">
-                                        <div class="workflow-step">
-                                            <div class="step-label">Step 1: Generate Challenge</div>
-                                            <button type="button" id="generateChallengeBtn" class="btn-workflow">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 2.2"></path>
-                                                </svg>
-                                                Generate Challenge
-                                            </button>
-                                            <textarea id="unsignedMessage" readonly class="challenge-text"
-                                                placeholder="Challenge will appear here..."></textarea>
-                                            <button type="button" id="copyChallengeBtn" class="btn-copy-challenge">
-                                                Copy to Clipboard
-                                            </button>
-                                        </div>
-
-                                        <div class="workflow-step">
-                                            <div class="step-label">Step 2: Sign with PGP Key</div>
-                                            <p class="step-hint">Sign the challenge with your private PGP key using your preferred tool</p>
-                                        </div>
 
                                         <div class="workflow-step">
                                             <div class="step-label">Step 3: Paste Signed Message</div>
@@ -642,19 +669,32 @@
                     promptInput.style.height = "auto";
                     showTyping();
 
+
+                    // --- JeebsAI API Integration: Send chat message ---
                     try {
-                        const data = await requestJson("/api/jeebs", {
+                        // Use /api/chat endpoint as per API_DOC.md
+                        const data = await requestJson("/api/chat", {
                             method: "POST",
-                            body: JSON.stringify({ prompt: prompt }),
+                            body: JSON.stringify({ message: prompt }),
                         });
                         hideTyping();
                         appendMessage("jeebs", data.response || "(No response body)", data.thought);
                     } catch (error) {
                         hideTyping();
                         appendMessage("jeebs", `Error: ${error.message}`);
-                        setStatus(`Chat request failed: ${error.message}`, "bad");
+                        setStatus(`Chat request failed: ${error.message}", "bad");
                     }
                 });
+    <!--
+        JeebsAI API Integration Notes:
+        - Registration: POST /api/register { username, email, pgp_public_key }
+        - Login: POST /api/login_pgp { username, signed_message, remember_me }
+        - Auth status: GET /api/auth/status
+        - Logout: POST /api/logout
+        - Chat: POST /api/chat { message }
+        - Chat history: GET /api/chat/history?limit=50
+        See API_DOC.md for full details.
+    -->
 
                 /* ── Textarea Auto-Resize & Shift+Enter ─────────────── */
                 promptInput.addEventListener("keydown", (event) => {

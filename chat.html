@@ -26,8 +26,8 @@
       </svg>
     </div>
     <div class="chat-title">Chat with JeebsAI</div>
-    <div class="chat-box" id="chatBox">Welcome! How can I help you today?</div>
-    <form class="chat-input-row" onsubmit="sendMessage(event)">
+    <div class="chat-box" id="chatBox">Loading chat...</div>
+    <form class="chat-input-row" id="chatForm">
       <input type="text" id="chatInput" placeholder="Type your message..." autocomplete="off" required>
       <button type="submit">Send</button>
     </form>
@@ -36,19 +36,93 @@
     <p>&copy; 2026 JeebsAI &mdash; All rights reserved.</p>
   </footer>
   <script>
-    function sendMessage(e) {
-      e.preventDefault();
-      const input = document.getElementById('chatInput');
-      const chatBox = document.getElementById('chatBox');
-      if (input.value.trim() === '') return;
-      chatBox.innerHTML += `<div><b>You:</b> ${input.value}</div>`;
-      chatBox.scrollTop = chatBox.scrollHeight;
-      setTimeout(() => {
-        chatBox.innerHTML += `<div><b>JeebsAI:</b> <span style='opacity:0.7'>This is a static demo. (No backend response)</span></div>`;
-        chatBox.scrollTop = chatBox.scrollHeight;
-      }, 600);
-      input.value = '';
+    // --- JeebsAI Real Chat Integration ---
+    // Utility: fetch JSON with error handling
+    async function requestJson(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      if (options.body && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+      if (window.localStorage && localStorage.getItem("jeebs_token") && !headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${localStorage.getItem("jeebs_token")}`);
+      }
+      const response = await fetch(url, { ...options, headers, credentials: "same-origin" });
+      let payload = {};
+      try { payload = await response.json(); } catch {}
+      if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+      return payload;
     }
+
+    // State
+    let state = { loggedIn: false, username: "", isAdmin: false, token: "" };
+    const chatBox = document.getElementById('chatBox');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+
+    // Check authentication and load chat
+    async function bootstrapChat() {
+      try {
+        const data = await requestJson("/api/auth/status");
+        if (!data.logged_in) {
+          chatBox.innerHTML = '<span style="color:#f88">Not logged in. <a href="index.html">Go to login</a>.</span>';
+          chatForm.style.display = 'none';
+          return;
+        }
+        state = { ...state, loggedIn: true, username: data.username, isAdmin: data.is_admin, token: data.token };
+        if (data.token) localStorage.setItem("jeebs_token", data.token);
+        await loadChatHistory();
+      } catch (e) {
+        chatBox.innerHTML = `<span style='color:#f88'>Error: ${e.message}</span>`;
+        chatForm.style.display = 'none';
+      }
+    }
+
+    // Load chat history
+    async function loadChatHistory() {
+      try {
+        const history = await requestJson("/api/chat/history?limit=50");
+        chatBox.innerHTML = '';
+        history.reverse().forEach(msg => {
+          chatBox.innerHTML += `<div><b>${msg.role === 'user' ? 'You' : 'JeebsAI'}:</b> ${msg.message}</div>`;
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+      } catch (e) {
+        chatBox.innerHTML = `<span style='color:#f88'>Failed to load chat history: ${e.message}</span>`;
+      }
+    }
+
+    // Send chat message
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const prompt = chatInput.value.trim();
+      if (!prompt) return;
+      chatBox.innerHTML += `<div><b>You:</b> ${prompt}</div>`;
+      chatBox.scrollTop = chatBox.scrollHeight;
+      chatInput.value = '';
+      try {
+        const data = await requestJson("/api/chat", {
+          method: "POST",
+          body: JSON.stringify({ message: prompt })
+        });
+        chatBox.innerHTML += `<div><b>JeebsAI:</b> ${data.response || '(No response body)'}</div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+      } catch (e) {
+        chatBox.innerHTML += `<div><b>JeebsAI:</b> <span style='color:#f88'>${e.message}</span></div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+    });
+
+    // Bootstrap on load
+    bootstrapChat();
+
+    // --- End JeebsAI Real Chat Integration ---
   </script>
+  <!--
+    JeebsAI Chat API Endpoints Used:
+    - GET /api/auth/status
+    - GET /api/chat/history?limit=50
+    - POST /api/chat { message }
+    See API_DOC.md for details.
+  -->
 </body>
 </html>
