@@ -585,10 +585,7 @@
                 document.getElementById("switchToLogin").addEventListener("click", () => setView("login"));
 
                 // Always generate a challenge on page load and when username changes
-                function autoGenerateChallenge() {
-                    updateUnsignedMessage();
-                }
-                document.getElementById("loginUsername").addEventListener("input", autoGenerateChallenge);
+                document.getElementById("loginUsername").addEventListener("input", updateUnsignedMessage);
                 document.getElementById("generateChallengeBtn").addEventListener("click", () => {
                     updateUnsignedMessage();
                     setStatus("Challenge refreshed.", "good");
@@ -601,13 +598,45 @@
                         setStatus("Clipboard access failed. Copy manually.", "bad");
                     }
                 });
-                // Also update challenge when switching to login view
+                // Update challenge when switching to login view
                 document.getElementById("switchToLogin").addEventListener("click", () => {
                     setView("login");
-                    setTimeout(autoGenerateChallenge, 0);
+                    updateUnsignedMessage();
                 });
                 // Generate challenge on initial page load
-                window.addEventListener("DOMContentLoaded", autoGenerateChallenge);
+                window.addEventListener("DOMContentLoaded", updateUnsignedMessage);
+                // Also update challenge after registration (when switching to login)
+                function afterRegistrationSwitchToLogin() {
+                    setView("login");
+                    updateUnsignedMessage();
+                }
+                // Patch registration handler to use afterRegistrationSwitchToLogin
+                const origRegisterHandler = document.getElementById("registerForm").onsubmit;
+                document.getElementById("registerForm").addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const username = document.getElementById("regUsername").value.trim();
+                    const email = document.getElementById("regEmail").value.trim();
+                    const pgpPublicKey = document.getElementById("publicKey").value.trim();
+                    if (!username.match(/^[a-zA-Z0-9_\-]{3,32}$/)) {
+                        setStatus("Username must be 3-32 characters (letters, numbers, -, _).", "bad");
+                        return;
+                    }
+                    if (!pgpPublicKey.startsWith("-----BEGIN PGP PUBLIC KEY BLOCK-----")) {
+                        setStatus("Invalid PGP public key format.", "bad");
+                        return;
+                    }
+                    try {
+                        await requestJson("/api/register", {
+                            method: "POST",
+                            body: JSON.stringify({ username, email, pgp_public_key: pgpPublicKey }),
+                        });
+                        document.getElementById("loginUsername").value = username;
+                        afterRegistrationSwitchToLogin();
+                        setStatus("Registration complete. Sign the challenge and log in.", "good");
+                    } catch (error) {
+                        setStatus(`Registration failed: ${error.message}", "bad");
+                    }
+                });
 
                 /* ── Register Form ─────────────────────────────────── */
                 document.getElementById("registerForm").addEventListener("submit", async (event) => {
