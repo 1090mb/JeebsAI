@@ -16,23 +16,17 @@ git stash save "Auto-stash $(date +%Y%m%d_%H%M%S)" 2>/dev/null || echo "Nothing 
 echo "📥 Pulling from GitHub..."
 git pull origin main
 
-# Restart service automatically
-echo "🔄 Restarting Jeebs..."
-if systemctl is-active --quiet jeebs 2>/dev/null; then
-    sudo systemctl restart jeebs
-    sleep 2
-    if systemctl is-active --quiet jeebs; then
-        echo "✅ Jeebs service restarted!"
-    else
-        echo "❌ Service failed. Check: journalctl -u jeebs -n 50"
-        exit 1
-    fi
-elif systemctl is-active --quiet jeebs-docker 2>/dev/null; then
-    docker-compose restart
-    echo "✅ Docker containers restarted!"
-else
-    echo "⚠️  No service detected. Restart manually."
-fi
+
+# Deploy static site files
+echo "🌐 Updating static site files..."
+cp index.html style.css /var/www/html/
+chown www-data:www-data /var/www/html/index.html /var/www/html/style.css
+chmod 644 /var/www/html/index.html /var/www/html/style.css
+
+# Restart nginx for static site
+echo "🔄 Restarting nginx..."
+systemctl restart nginx
+echo "✅ Static site updated and nginx restarted!"
 
 echo ""
 echo "════════════════════════════════════════════════════════"
