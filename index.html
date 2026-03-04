@@ -603,8 +603,15 @@
                     setView("login");
                     updateUnsignedMessage();
                 });
-                // Generate challenge on initial page load
-                window.addEventListener("DOMContentLoaded", updateUnsignedMessage);
+                // Generate challenge on initial page load (after DOM is ready and input exists)
+                window.addEventListener("DOMContentLoaded", function() {
+                    // Defensive: only update if input and textarea exist
+                    var loginInput = document.getElementById("loginUsername");
+                    var unsignedMsg = document.getElementById("unsignedMessage");
+                    if (loginInput && unsignedMsg) {
+                        updateUnsignedMessage();
+                    }
+                });
                 // Registration handler: update challenge after registration and switch to login
                 document.getElementById("registerForm").addEventListener("submit", async (event) => {
                     event.preventDefault();
