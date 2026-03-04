@@ -72,4 +72,3 @@ async function denyProposal(id) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', renderProposals);
