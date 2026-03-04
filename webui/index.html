@@ -255,6 +255,10 @@
                 /* ── State & Element References ────────────────────── */
                 async function loadChatHistory() {
                     try {
+                        // Only load history if user is logged in
+                        if (!state.loggedIn) {
+                            return;
+                        }
                         const history = await requestJson("/api/chat/history?limit=50");
                         chatFeed.innerHTML = "";
                         history.reverse().forEach(msg => {
@@ -737,14 +741,24 @@
                 }
 
                 /* ── Init ──────────────────────────────────────────── */
-                JeebsNav.init("home");
-                updateUnsignedMessage();
-                renderAuthState();
-                bootstrapAuth();
-                loadChatHistory();
-                updateBrainInfo();
-                // Update brain info every 10 seconds
-                setInterval(updateBrainInfo, 10000);
+                async function initializeApp() {
+                    JeebsNav.init("home");
+                    updateUnsignedMessage();
+                    renderAuthState();
+
+                    // Wait for authentication to complete
+                    await bootstrapAuth();
+
+                    // Now load chat history after auth is done
+                    await loadChatHistory();
+
+                    // Load brain metrics and update periodically
+                    updateBrainInfo();
+                    setInterval(updateBrainInfo, 10000);
+                }
+
+                // Start the app
+                initializeApp();
             </script>
         </main>
     </div>
