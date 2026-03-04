@@ -106,8 +106,8 @@ pub async fn smart_chat(
         context.session_id
     );
 
-    // Step 2: Analyze user message
-    let user_intent = conversation_context::analyze_user_message(message);
+    // Step 2: Analyze user message with semantic intelligence (using conversation context)
+    let user_intent = conversation_context::analyze_user_message_semantic(message, &context.messages);
     let detected_topic_shift = conversation_context::detect_topic_shift(&context, message);
 
     if detected_topic_shift {

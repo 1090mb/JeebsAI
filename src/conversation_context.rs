@@ -186,6 +186,68 @@ pub fn analyze_user_message(message: &str) -> UserIntent {
     }
 }
 
+/// Analyze user message with semantic intelligence and conversation history
+pub fn analyze_user_message_semantic(message: &str, history: &[ConversationMessage]) -> UserIntent {
+    use crate::conversation_intelligence;
+
+    // Try semantic intent detection first (uses conversation context)
+    let semantic_intent = conversation_intelligence::detect_semantic_intent(
+        message,
+        if history.is_empty() { None } else { Some(history) },
+    );
+
+    // Use semantic intent if it has good confidence, otherwise use fallback
+    let primary = if semantic_intent.confidence > 0.65 {
+        semantic_intent.primary_intent
+    } else {
+        // Fall back to basic keyword matching
+        analyze_user_message(message).primary
+    };
+
+    // Still use the existing logic for sentiment detection
+    let lower = message.to_lowercase();
+    let sentiment = if lower.contains("awesome")
+        || lower.contains("excellent")
+        || lower.contains("perfect")
+        || lower.contains("great")
+        || lower.contains("love")
+        || lower.contains("thanks") {
+        0.9
+    } else if lower.contains("good") || lower.contains("nice") {
+        0.6
+    } else if lower.contains("confusing") || lower.contains("unclear") {
+        -0.5
+    } else if lower.contains("wrong")
+        || lower.contains("bad")
+        || lower.contains("hate")
+        || lower.contains("terrible")
+        || lower.contains("disagree") {
+        -0.8
+    } else {
+        0.2
+    };
+
+    let requires_explanation = message.len() > 20
+        && (lower.contains("why")
+            || lower.contains("explain")
+            || lower.contains("understand")
+            || lower.contains("how does")
+            || lower.contains("what makes"));
+
+    UserIntent {
+        primary,
+        sentiment,
+        confidence: if semantic_intent.confidence > 0.65 {
+            semantic_intent.confidence
+        } else if lower.contains("?") {
+            0.85
+        } else {
+            0.70
+        },
+        requires_explanation,
+    }
+}
+
 /// Extract topics from message
 fn extract_topics(message: &str) -> Vec<String> {
     let words: Vec<&str> = message

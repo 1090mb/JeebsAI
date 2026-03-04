@@ -13,6 +13,7 @@ pub mod mcp_server;
 pub mod mcp_api;
 pub mod continuous_learning;
 pub mod conversation_context;
+pub mod conversation_intelligence;
 pub mod smart_response;
 pub mod enhanced_chat;
 pub mod data_synthesis;
