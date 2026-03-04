@@ -613,11 +613,20 @@
                 });
                 // Generate challenge on initial page load (after DOM is ready and input exists)
                 window.addEventListener("DOMContentLoaded", function() {
-                    // Defensive: only update if input and textarea exist
                     var loginInput = document.getElementById("loginUsername");
                     var unsignedMsg = document.getElementById("unsignedMessage");
                     if (loginInput && unsignedMsg) {
                         updateUnsignedMessage();
+                    }
+                    // MutationObserver: update challenge if login view is shown dynamically
+                    var loginView = document.getElementById("loginView");
+                    if (loginView) {
+                        const observer = new MutationObserver(() => {
+                            if (loginView.classList.contains("active")) {
+                                updateUnsignedMessage();
+                            }
+                        });
+                        observer.observe(loginView, { attributes: true, attributeFilter: ["class"] });
                     }
                 });
                 // Registration handler: update challenge after registration and switch to login
