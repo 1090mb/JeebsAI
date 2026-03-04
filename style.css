@@ -1,3 +1,30 @@
+.pgp-btn {
+    width: 100%;
+    padding: 0.95rem 1.1rem;
+    border-radius: 9px;
+    background: linear-gradient(90deg, #3a8dde 60%, #256bb2 100%);
+    color: #fff;
+    font-size: 1.15rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 8px #3a8dde33;
+    border: none;
+    margin-top: 0.2rem;
+    margin-bottom: 1.1rem;
+    transition: background 0.2s, transform 0.1s;
+}
+.pgp-btn:hover {
+    background: linear-gradient(90deg, #256bb2 60%, #3a8dde 100%);
+    transform: translateY(-2px) scale(1.03);
+}
+
+.pgp-desc {
+    color: #b0c4de;
+    font-size: 1.05rem;
+    text-align: center;
+    margin-bottom: 1.2rem;
+    margin-top: -0.7rem;
+}
 .register-btn {
     display: block;
     width: 100%;
