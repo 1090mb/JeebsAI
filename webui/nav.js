@@ -11,6 +11,7 @@ const JeebsNav = (function () {
     // General navigation
     const PAGES = [
         { id: 'home', label: 'Console', href: '/webui/index.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer', 'Reguser', 'Guest'], icon: '💬' },
+        { id: 'dashboard', label: 'Dashboard', href: '/webui/dashboard.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer', 'Reguser', 'Guest'], icon: '📱' },
         { id: 'profile', label: 'Profile', href: '/webui/profile.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer', 'Reguser'], icon: '👤' },
         { id: 'search', label: 'Brain Search', href: '/webui/search.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer', 'Reguser'], icon: '🧠' },
         { id: 'status', label: 'Status', href: '/webui/status.html', roles: ['Admin', 'super_admin', 'Mod', 'Trainer'], icon: '📊' },
