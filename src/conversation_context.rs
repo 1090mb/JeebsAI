@@ -10,6 +10,7 @@
 
 use serde_json::json;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct ConversationPair {
@@ -19,11 +20,35 @@ pub struct ConversationPair {
     pub related_topics: Vec<String>,
 }
 
+/// Represents different ways a topic entered the conversation
+#[derive(Debug, Clone, PartialEq)]
+pub enum TopicEntryType {
+    UserExplicit,      // User said "Let's talk about X"
+    UserImplicit,      // Inferred from question about X
+    SubtopicExploration,  // Related to current topic
+    Tangent,            // Off-topic but related
+    Correction,         // User corrected/clarified
+}
+
+/// A topic node in the conversation hierarchy
+#[derive(Debug, Clone)]
+pub struct TopicNode {
+    pub name: String,
+    pub depth: u32,  // How specific (0=broad, 3=very specific)
+    pub relevance: f32,  // 0.0-1.0, decays over time
+    pub parent_topic: Option<String>,  // Hierarchy
+    pub entry_type: TopicEntryType,  // How this topic was introduced
+}
+
 #[derive(Debug, Clone)]
 pub struct ConversationContext {
     pub session_id: String,
     pub user_id: Option<String>,
     pub messages: Vec<ConversationMessage>,
+    // NEW: Topic hierarchy instead of flat topics
+    pub topic_stack: Vec<TopicNode>,  // Stack with depth/relevance
+    pub topic_relationships: HashMap<String, f32>,  // topic → parent weight
+    // KEPT FOR BACKWARD COMPATIBILITY:
     pub current_topic: String,
     pub previous_topics: Vec<String>,
     pub user_intent: String,
@@ -110,10 +135,44 @@ pub async fn load_conversation_context(
         .find(|m| m.role == "user")
         .map(|m| m.content.clone());
 
+    // Build topic hierarchy: current topic with depth 1, previous topics with decay
+    let mut topic_stack = Vec::new();
+    if !current_topic.is_empty() && current_topic != "general" {
+        topic_stack.push(TopicNode {
+            name: current_topic.clone(),
+            depth: 1,
+            relevance: 1.0,
+            parent_topic: None,
+            entry_type: TopicEntryType::UserImplicit,
+        });
+    }
+
+    // Add previous topics as related topics with decaying relevance
+    for (idx, topic) in topics.iter().take(3).enumerate() {
+        if topic != &current_topic && !topic.is_empty() {
+            let relevance = 1.0 - (idx as f32 * 0.25);  // Decay relevance
+            topic_stack.push(TopicNode {
+                name: topic.clone(),
+                depth: 0,
+                relevance: relevance.max(0.3),
+                parent_topic: if !current_topic.is_empty() && current_topic != "general" {
+                    Some(current_topic.clone())
+                } else {
+                    None
+                },
+                entry_type: TopicEntryType::UserImplicit,
+            });
+        }
+    }
+
+    let topic_relationships = HashMap::new();  // Will be populated as conversation evolves
+
     Ok(ConversationContext {
         session_id: session_id.to_string(),
         user_id: user_id.map(|s| s.to_string()),
         messages,
+        topic_stack,
+        topic_relationships,
         current_topic,
         previous_topics: topics,
         user_intent: "ask".to_string(),
