@@ -373,20 +373,21 @@ impl Cortex {
             return Self::handle_greeting(input);
         }
 
+        // Analyze intent to customize response
+        let intent = crate::conversation_context::analyze_user_message(input);
+
         // Search across all topics ("*") for relevant facts based on the input query
         let facts = crate::deep_learning::get_relevant_facts_for_chat(&data.db, "*", input)
             .await
             .unwrap_or_default();
 
         if facts.is_empty() {
-            return format!("I processed: \"{}\". I don't have enough data on this topic yet.", input);
+            // Smarter fallback responses based on intent
+            return Self::generate_fallback_response(input, &intent.primary);
         }
 
-        let mut response = format!("Based on my knowledge regarding \"{}\":\n\n", input);
-        for fact in facts {
-            response.push_str(&format!("• {}\n", fact.fact));
-        }
-        response
+        // Generate contextual response based on intent
+        Self::generate_contextual_response(input, &facts, &intent)
     }
 
     pub async fn think_for_user(input: &str, data: &web::Data<AppState>, _user_id: &str, _username: Option<&str>) -> String {
@@ -442,6 +443,146 @@ impl Cortex {
         };
 
         response.to_string()
+    }
+
+    /// Generate smarter fallback responses when knowledge is sparse
+    fn generate_fallback_response(query: &str, intent: &str) -> String {
+        let keywords = Self::extract_keywords(query);
+        let keyword_phrase = if keywords.is_empty() {
+            "that topic".to_string()
+        } else {
+            keywords.join(", ")
+        };
+
+        match intent {
+            "reasoning" => format!(
+                "I'm still learning about the reasoning behind {}. Could you tell me more, or ask me something else I might know about?",
+                keyword_phrase
+            ),
+            "explain" => format!(
+                "I need more information to give you a good explanation about {}. Can you provide some context or examples?",
+                keyword_phrase
+            ),
+            "example" => format!(
+                "I don't have specific examples about {} in my knowledge yet, but I'm actively learning. Try asking me a related question!",
+                keyword_phrase
+            ),
+            "instruct" => format!(
+                "I'd love to help you with how to do something about {}, but I need more specifics first. What exactly are you trying to accomplish?",
+                keyword_phrase
+            ),
+            "compare" => format!(
+                "I'd be happy to compare things related to {}, but I need your input first. What specifically would you like me to compare?",
+                keyword_phrase
+            ),
+            "explore" => format!(
+                "I'm curious to explore {} with you! Could you give me a launching point or ask a more specific question?",
+                keyword_phrase
+            ),
+            "clarify" => format!(
+                "I'm not quite sure about {}. Can you rephrase your question or give me more context?",
+                keyword_phrase
+            ),
+            _ => format!(
+                "I'm still learning about {}. I don't have enough information yet, but I'm actively acquiring knowledge. Feel free to teach me or ask about something else!",
+                keyword_phrase
+            ),
+        }
+    }
+
+    /// Generate contextual responses based on intent and facts
+    fn generate_contextual_response(
+        query: &str,
+        facts: &[crate::deep_learning::LearnedFact],
+        intent: &crate::conversation_context::UserIntent,
+    ) -> String {
+        match intent.primary.as_str() {
+            "reasoning" => Self::generate_reasoning_response(query, facts),
+            "explain" => Self::generate_explanation_response(query, facts),
+            "example" => Self::generate_example_response(query, facts),
+            "instruct" => Self::generate_instruction_response(query, facts),
+            "compare" => Self::generate_comparison_response(query, facts),
+            "explore" => Self::generate_exploration_response(query, facts),
+            _ => Self::generate_standard_response(query, facts),
+        }
+    }
+
+    fn generate_reasoning_response(query: &str, facts: &[crate::deep_learning::LearnedFact]) -> String {
+        let mut response = format!("Here's why {} is relevant:\n\n", query);
+        for (i, fact) in facts.iter().take(3).enumerate() {
+            response.push_str(&format!("{}. {}\n", i + 1, fact.fact));
+        }
+        response.push_str("\nThe core reasoning is that these concepts are interconnected—understanding one helps illuminate the others.");
+        response
+    }
+
+    fn generate_explanation_response(query: &str, facts: &[crate::deep_learning::LearnedFact]) -> String {
+        if facts.is_empty() {
+            return format!("I don't have enough to explain {}. Try asking me something else.", query);
+        }
+
+        let mut response = format!("Let me explain {}:\n\n", query);
+        response.push_str(&format!("**Core concept:** {}\n\n", facts[0].fact));
+
+        if facts.len() > 1 {
+            response.push_str("**Related details:**\n");
+            for fact in facts.iter().skip(1).take(2) {
+                response.push_str(&format!("- {}\n", fact.fact));
+            }
+        }
+        response
+    }
+
+    fn generate_example_response(query: &str, facts: &[crate::deep_learning::LearnedFact]) -> String {
+        let mut response = format!("Examples related to {}:\n\n", query);
+        for (i, fact) in facts.iter().take(4).enumerate() {
+            response.push_str(&format!("{}. {}\n", i + 1, fact.fact));
+        }
+        response
+    }
+
+    fn generate_instruction_response(query: &str, facts: &[crate::deep_learning::LearnedFact]) -> String {
+        let mut response = format!("Here's how to approach {}:\n\n", query);
+        for (i, fact) in facts.iter().take(3).enumerate() {
+            response.push_str(&format!("Step {}: {}\n", i + 1, fact.fact));
+        }
+        response
+    }
+
+    fn generate_comparison_response(query: &str, facts: &[crate::deep_learning::LearnedFact]) -> String {
+        let mut response = format!("Regarding {}:\n\n", query);
+        response.push_str("**Similarities and differences:**\n");
+        for fact in facts.iter().take(4) {
+            response.push_str(&format!("• {}\n", fact.fact));
+        }
+        response
+    }
+
+    fn generate_exploration_response(query: &str, facts: &[crate::deep_learning::LearnedFact]) -> String {
+        let mut response = format!("Let's explore {} further:\n\n", query);
+        for fact in facts.iter().take(4) {
+            response.push_str(&format!("• {}\n", fact.fact));
+        }
+        response.push_str("\nWould you like to dive deeper into any of these aspects?");
+        response
+    }
+
+    fn generate_standard_response(query: &str, facts: &[crate::deep_learning::LearnedFact]) -> String {
+        let mut response = format!("Based on my knowledge about \"{}\":\n\n", query);
+        for fact in facts.iter().take(5) {
+            response.push_str(&format!("• {}\n", fact.fact));
+        }
+        response
+    }
+
+    fn extract_keywords(input: &str) -> Vec<String> {
+        let stop_words = vec!["the", "a", "is", "are", "was", "were", "it", "and", "or", "but", "in", "on", "at", "to", "of", "for"];
+        input
+            .split_whitespace()
+            .filter(|word| word.len() > 3 && !stop_words.contains(&word.to_lowercase().as_str()))
+            .map(|w| w.to_lowercase())
+            .take(3)
+            .collect()
     }
 }
 

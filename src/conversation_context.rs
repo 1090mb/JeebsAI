@@ -46,11 +46,12 @@ pub async fn load_conversation_context(
     user_id: Option<&str>,
 ) -> Result<ConversationContext, String> {
     // Try to fetch existing conversation from chat_history
+    // Increased from 20 to 100 messages for better context retention
     let history = sqlx::query_as::<_, (String, String)>(
         "SELECT role, message FROM chat_history
          WHERE session_id = ?
          ORDER BY created_at DESC
-         LIMIT 20",
+         LIMIT 100",
     )
     .bind(session_id)
     .fetch_all(pool)
@@ -104,38 +105,61 @@ pub async fn load_conversation_context(
 pub fn analyze_user_message(message: &str) -> UserIntent {
     let lower = message.to_lowercase();
 
-    // Detect intent
-    let primary = if lower.contains("why") || lower.contains("explain") {
+    // Detect intent with higher precision
+    let primary = if lower.contains("why") {
+        "reasoning"
+    } else if lower.contains("explain") || lower.contains("elaborate") {
         "explain"
-    } else if lower.contains("how") || lower.contains("can you") {
+    } else if lower.contains("example") || lower.contains("show me") {
+        "example"
+    } else if lower.contains("how") || lower.contains("can you") || lower.contains("could you") {
         "instruct"
-    } else if lower.contains("what") || lower.contains("tell me") {
+    } else if lower.contains("compare") || lower.contains("similar") || lower.contains("difference") {
+        "compare"
+    } else if lower.contains("what") || lower.contains("tell me") || lower.contains("define") {
         "ask"
-    } else if lower.contains("more") || lower.contains("another") {
+    } else if lower.contains("more") || lower.contains("another") || lower.contains("continue") {
         "explore"
-    } else if lower.contains("?") && message.len() < 20 {
+    } else if (lower.contains("?") && message.len() < 20) || lower.contains("right?") || lower.contains("correct?") {
         "clarify"
     } else {
         "ask"
     };
 
-    // Detect sentiment
-    let sentiment = if lower.contains("awesome") || lower.contains("great") || lower.contains("thanks") {
-        0.8
-    } else if lower.contains("wrong") || lower.contains("bad") || lower.contains("hate") {
-        -0.7
+    // Detect sentiment with more nuance
+    let sentiment = if lower.contains("awesome")
+        || lower.contains("excellent")
+        || lower.contains("perfect")
+        || lower.contains("great")
+        || lower.contains("love")
+        || lower.contains("thanks") {
+        0.9
+    } else if lower.contains("good") || lower.contains("nice") {
+        0.6
+    } else if lower.contains("confusing") || lower.contains("unclear") {
+        -0.5
+    } else if lower.contains("wrong")
+        || lower.contains("bad")
+        || lower.contains("hate")
+        || lower.contains("terrible")
+        || lower.contains("disagree") {
+        -0.8
     } else {
         0.2
     };
 
     // Detect if needs explanation
-    let requires_explanation = message.len() > 30
-        && (lower.contains("why") || lower.contains("explain") || lower.contains("understand"));
+    let requires_explanation = message.len() > 20
+        && (lower.contains("why")
+            || lower.contains("explain")
+            || lower.contains("understand")
+            || lower.contains("how does")
+            || lower.contains("what makes"));
 
     UserIntent {
         primary: primary.to_string(),
         sentiment,
-        confidence: 0.75,
+        confidence: if lower.contains("?") { 0.85 } else { 0.70 },
         requires_explanation,
     }
 }
