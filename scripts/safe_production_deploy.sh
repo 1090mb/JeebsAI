@@ -88,6 +88,9 @@ fi
 NEW_REF="$(git rev-parse --short HEAD)"
 info "Deploy target resolved to ${NEW_REF} (${TARGET_DESC})"
 
+info "Removing macOS metadata files that break sqlx migrations"
+find "${APP_DIR}" -type f -name '._*' -delete
+
 info "Building release binary before touching the running service"
 cargo build --release
 
