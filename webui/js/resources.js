@@ -2,15 +2,19 @@
 
 
 async function fetchProposals() {
-    const res = await fetch('/api/brain/proposals?status=pending', { credentials: 'same-origin' });
+    const res = await safeFetch('/api/brain/proposals?status=pending', {
+        credentials: 'same-origin',
+        headers: authHeaders()
+    });
     if (!res.ok) throw new Error('Failed to load proposals');
     return await res.json();
 }
 
 async function approveProposalAPI(proposalId) {
-    const res = await fetch(`/api/brain/proposals/${proposalId}/approve`, {
+    const res = await safeFetch(`/api/brain/proposals/${proposalId}/approve`, {
         method: 'POST',
-        credentials: 'same-origin'
+        credentials: 'same-origin',
+        headers: authHeaders()
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to approve proposal');
@@ -18,9 +22,9 @@ async function approveProposalAPI(proposalId) {
 }
 
 async function denyProposalAPI(proposalId, reason) {
-    const res = await fetch(`/api/brain/proposals/${proposalId}/deny`, {
+    const res = await safeFetch(`/api/brain/proposals/${proposalId}/deny`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(true),
         credentials: 'same-origin',
         body: JSON.stringify(reason ? { reason } : {})
     });
@@ -34,21 +38,22 @@ async function renderProposals() {
     if (!container) return;
     container.innerHTML = '<div class="muted">Loading proposals...</div>';
     try {
-        const data = await fetchProposals();
-        if (!data.proposals || data.proposals.length === 0) {
+        const proposals = await fetchProposals();
+        if (!Array.isArray(proposals) || proposals.length === 0) {
             container.innerHTML = '<div class="muted">No proposals found.</div>';
             return;
         }
         container.innerHTML = '';
-        data.forEach(p => {
+        proposals.forEach(p => {
             const card = document.createElement('div');
             card.className = 'card';
             card.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div>
                         <strong>${p.title || '(untitled)'}</strong>
-                        <div class="text-muted" style="font-size:0.9em">${p.proposer_id || 'system'} &mdash; ${p.created_at ? new Date(p.created_at).toLocaleString() : ''}</div>
+                        <div class="text-muted" style="font-size:0.9em">${p.proposer_id || 'system'} | ${p.proposal_type || 'proposal'} | ${p.created_at ? new Date(p.created_at).toLocaleString() : ''}</div>
                         <div style="margin:6px 0">${p.description || ''}</div>
+                        <div class="text-muted" style="font-size:0.85em">Votes: ${p.votes_for || 0} approve, ${p.votes_against || 0} deny</div>
                     </div>
                     <div style="display:flex;gap:8px;">
                         <button class="btn btn-success" onclick="acceptProposal('${p.id}')">Accept</button>
@@ -84,4 +89,3 @@ async function denyProposal(id) {
         alert('Failed to deny: ' + e.message);
     }
 }
-

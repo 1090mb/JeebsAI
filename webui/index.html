@@ -770,6 +770,7 @@
             <h3>👑 Admin Controls</h3>
             <div class="admin-buttons">
                 <button onclick="adminAction('stats')">System Stats</button>
+                <button onclick="window.location.href='/webui/trainer_resources.html'">Review Proposals</button>
                 <button onclick="adminAction('users')">List Users</button>
                 <button onclick="window.location.href='/webui/logs.html'">View Logs</button>
             </div>
@@ -1254,11 +1255,14 @@ async function loadLearningPanel() {
 // Load proposals
 async function loadProposalsPanel() {
     try {
-        const proposals = await fetch('/api/brain/proposals?status=pending').then(r => r.json());
+        const proposals = await safeFetch('/api/brain/proposals?status=pending', {
+            credentials: 'same-origin',
+            headers: state.token ? { 'Authorization': `Bearer ${state.token}` } : {}
+        }).then(r => r.json());
         const contentEl = document.getElementById('proposalsContent');
         const badgeEl = document.getElementById('proposalBadge');
 
-        if (!proposals || proposals.length === 0) {
+        if (!Array.isArray(proposals) || proposals.length === 0) {
             badgeEl.textContent = '';
             contentEl.innerHTML = '<div class="monitor-item">No pending proposals</div>';
             return;
@@ -1266,7 +1270,7 @@ async function loadProposalsPanel() {
 
         badgeEl.textContent = proposals.length;
         contentEl.innerHTML = proposals.map(p => {
-            const isAdmin = state.user === '1090mb';
+            const isAdmin = !!state.isAdmin;
             let buttons = `<div class="proposal-buttons">`;
             if (isAdmin) {
                 buttons += `<button onclick="approveProposal('${p.id}')">✓ Approve</button><button class="danger" onclick="denyProposal('${p.id}')">✗ Deny</button>`;
@@ -1277,7 +1281,7 @@ async function loadProposalsPanel() {
 
             return `<div class="proposal-item">
                 <div class="proposal-title">${escapeHtml(p.title || 'Untitled')}</div>
-                <div class="proposal-meta">Type: ${p.type || 'unknown'} | Votes: ${p.votes || 0}</div>
+                <div class="proposal-meta">Type: ${escapeHtml(p.proposal_type || 'unknown')} | Votes: +${p.votes_for || 0} / -${p.votes_against || 0}</div>
                 ${buttons}
             </div>`;
         }).join('');
@@ -1291,16 +1295,17 @@ async function loadProposalsPanel() {
 async function approveProposal(proposalId) {
     if (!confirm('Approve this proposal?')) return;
     try {
-        const res = await fetch(`/api/brain/proposals/${proposalId}/approve`, {
+        const res = await safeFetch(`/api/brain/proposals/${proposalId}/approve`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${state.token}` }
+            credentials: 'same-origin',
+            headers: state.token ? { 'Authorization': `Bearer ${state.token}` } : {}
         });
-        if (res.ok) {
-            showNotification('Proposal approved!', 'success');
-            loadProposalsPanel();
-        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to approve proposal');
+        showNotification('Proposal approved!', 'success');
+        loadProposalsPanel();
     } catch (err) {
-        showNotification('Failed to approve proposal', 'error');
+        showNotification(err.message || 'Failed to approve proposal', 'error');
     }
 }
 
@@ -1308,16 +1313,22 @@ async function approveProposal(proposalId) {
 async function denyProposal(proposalId) {
     if (!confirm('Deny this proposal?')) return;
     try {
-        const res = await fetch(`/api/brain/proposals/${proposalId}/deny`, {
+        const reason = prompt('Optional: Enter a reason for denial (leave blank for none):') || '';
+        const res = await safeFetch(`/api/brain/proposals/${proposalId}/deny`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${state.token}` }
+            credentials: 'same-origin',
+            headers: {
+                ...(state.token ? { 'Authorization': `Bearer ${state.token}` } : {}),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(reason ? { reason } : {})
         });
-        if (res.ok) {
-            showNotification('Proposal denied', 'success');
-            loadProposalsPanel();
-        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to deny proposal');
+        showNotification('Proposal denied', 'success');
+        loadProposalsPanel();
     } catch (err) {
-        showNotification('Failed to deny proposal', 'error');
+        showNotification(err.message || 'Failed to deny proposal', 'error');
     }
 }
 
