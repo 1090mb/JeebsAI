@@ -488,9 +488,7 @@
       try {
         const res = await fetch('/api/evolution/stats');
         const data = await res.json();
-        const stats = data.stats || {};
-
-        const brain = stats.brain || {};
+        const brain = data.brain || {};
         const container = document.getElementById('stats-container');
         if (container) {
           container.innerHTML = `
@@ -537,7 +535,8 @@
     async function loadSessions() {
       try {
         const res = await fetch('/api/brain/learning-sessions');
-        const sessions = await res.json();
+        const payload = await res.json();
+        const sessions = payload.sessions || [];
         const container = document.getElementById('active-sessions-container');
         if (!container) return;
 

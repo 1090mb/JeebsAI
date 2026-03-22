@@ -1199,22 +1199,57 @@ async function loadLiveMonitor() {
 // Load learning stats
 async function loadLearningPanel() {
     try {
-        const stats = await fetch('/api/brain/learning-stats').then(r => r.json());
-        const evolution = await fetch('/api/evolution/stats').then(r => r.json());
-        const graph = await fetch('/api/brain/logic_graph').then(r => r.json());
+        const learningHeaders = state.token ? { 'Authorization': `Bearer ${state.token}` } : {};
+        const [statsRes, evolutionRes, graphRes, brainDetailRes] = await Promise.allSettled([
+            safeFetch('/api/brain/learning-stats', {
+                credentials: 'same-origin',
+                headers: learningHeaders
+            }),
+            safeFetch('/api/evolution/stats', {
+                credentials: 'same-origin',
+                headers: learningHeaders
+            }),
+            safeFetch('/api/brain/logic_graph', {
+                credentials: 'same-origin',
+                headers: learningHeaders
+            }),
+            safeFetch('/api/admin/brain/detailed', {
+                credentials: 'same-origin',
+                headers: learningHeaders
+            })
+        ]);
+
+        const statsPayload = statsRes.status === 'fulfilled' ? await statsRes.value.json().catch(() => ({})) : {};
+        const evolutionPayload = evolutionRes.status === 'fulfilled' ? await evolutionRes.value.json().catch(() => ({})) : {};
+        const graph = graphRes.status === 'fulfilled' ? await graphRes.value.json().catch(() => ({})) : {};
+        const brainDetail = brainDetailRes.status === 'fulfilled' && brainDetailRes.value.ok
+            ? await brainDetailRes.value.json().catch(() => ({}))
+            : {};
+
+        const stats = statsPayload.stats || {};
+        const brain = evolutionPayload.brain || {};
+        const totalSessions = stats.total_learning_sessions || 0;
+        const totalFacts = stats.total_facts_learned || 0;
+        const confidence = stats.average_confidence || 0;
+        const conf = Math.round(confidence * 100);
+        const graphNodes = Array.isArray(graph.nodes) ? graph.nodes.length : 0;
+        const graphEdges = Array.isArray(graph.edges) ? graph.edges.length : 0;
+        const brainNodes = brainDetail.total_nodes ?? brain.nodes ?? graphNodes;
+        const totalLinks = brainDetail.total_links ?? graphEdges;
+        const entropy = brainDetail.entropy;
+        const knowledgeDrive = Math.round((brain.knowledge_drive || 0) * 100);
 
         const contentEl = document.getElementById('learningContent');
         let html = '';
 
-        if (stats) {
-            const conf = Math.round((stats.confidence_level || 0) * 100);
+        if (statsPayload.success !== false) {
             html += `<div class="learning-stat">
                 <div class="learning-stat-label">Sessions</div>
-                <div class="learning-stat-value">${stats.total_sessions || 0}</div>
+                <div class="learning-stat-value">${totalSessions}</div>
             </div>
             <div class="learning-stat">
                 <div class="learning-stat-label">Facts Learned</div>
-                <div class="learning-stat-value">${stats.total_facts || 0}</div>
+                <div class="learning-stat-value">${totalFacts}</div>
             </div>
             <div class="learning-stat">
                 <div class="learning-stat-label">Confidence</div>
@@ -1223,25 +1258,25 @@ async function loadLearningPanel() {
             </div>`;
         }
 
-        if (evolution) {
+        if (evolutionRes.status === 'fulfilled') {
             html += `<div class="learning-stat">
                 <div class="learning-stat-label">Brain Nodes</div>
-                <div class="learning-stat-value">${evolution.total_brain_nodes || 0}</div>
+                <div class="learning-stat-value">${brainNodes}</div>
             </div>
             <div class="learning-stat">
                 <div class="learning-stat-label">Links</div>
-                <div class="learning-stat-value">${evolution.total_links || 0}</div>
+                <div class="learning-stat-value">${totalLinks}</div>
             </div>
             <div class="learning-stat">
-                <div class="learning-stat-label">Entropy</div>
-                <div class="learning-stat-value">${(evolution.entropy || 0).toFixed(2)}</div>
+                <div class="learning-stat-label">${typeof entropy === 'number' ? 'Entropy' : 'Knowledge Drive'}</div>
+                <div class="learning-stat-value">${typeof entropy === 'number' ? entropy.toFixed(2) : `${knowledgeDrive}%`}</div>
             </div>`;
         }
 
-        if (graph) {
+        if (graphRes.status === 'fulfilled') {
             html += `<div class="learning-stat">
                 <div class="learning-stat-label">Graph Stats</div>
-                <div class="learning-stat-value">Nodes: ${(graph.nodes || []).length}<br/>Edges: ${(graph.edges || []).length}</div>
+                <div class="learning-stat-value">Nodes: ${graphNodes}<br/>Edges: ${graphEdges}</div>
             </div>`;
         }
 
